@@ -1,0 +1,23 @@
+#!/bin/bash
+# Installs or removes system software from Debian's own signed repositories.
+# Admins may run this through sudo without a password, so Deskmate can do it
+# for a Bot after you approve; a Bot's own account can't run it at all.
+set -eu
+[ "$(id -u)" = 0 ] || { echo "Run this with sudo." >&2; exit 1; }
+act="${1:-}"; shift || true
+case "$act" in install|remove) ;; *) echo "Usage: deskmate-pkg install|remove <package>..." >&2; exit 2 ;; esac
+[ $# -ge 1 ] && [ $# -le 20 ] || { echo "Name 1 to 20 packages." >&2; exit 2; }
+for p in "$@"; do
+  [[ "$p" =~ ^[a-z0-9][a-z0-9+.-]{1,60}$ ]] || { echo "Not a package name: $p" >&2; exit 2; }
+  if [ "$act" = remove ]; then
+    case "$p" in sudo|systemd*|linux-image*|grub*|shim*|openssh-server|nftables|libc6|apt|dpkg|bash|coreutils|labwc|greetd|tuigreet|bubblewrap|acl|unattended-upgrades|clamav*|passwd|login|util-linux|mount|e2fsprogs|ca-certificates)
+      echo "Deskmate OS needs $p; it stays." >&2; exit 2 ;; esac
+  fi
+done
+export DEBIAN_FRONTEND=noninteractive PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+if [ "$act" = install ]; then
+  apt-get update -q >/dev/null 2>&1 || true
+  exec apt-get install -y -q --no-install-recommends -- "$@"
+else
+  exec apt-get remove -y -q -- "$@"
+fi

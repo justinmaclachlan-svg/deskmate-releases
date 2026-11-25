@@ -1,0 +1,427 @@
+#!/bin/bash
+# Deskmate OS look and behaviour, per person: themes, fonts, backgrounds,
+# keys, the bar, the display, default apps, hooks, web apps and toggles.
+# Reach it as `deskmate-os <thing> ...`. Everything it writes carries a
+# "Managed by Deskmate OS" line; delete that line in a file to keep your own
+# edits to it. Theme and settings files are read as data, never run.
+set -u
+SYS=/usr/share/deskmate-os
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
+MY="$CFG/deskmate-os"
+MARK="Managed by Deskmate OS. Delete this line to keep your own edits."
+QUIET=
+PLAIN="the theme's colour"
+for a in "$@"; do [ "$a" = --quiet ] && QUIET=1; done
+say() { [ -n "$QUIET" ] || printf '%s\n' "$*"; }
+die() { printf '%s\n' "$*" >&2; exit 1; }
+[ "$(id -u)" = 0 ] && die "Run this as yourself, not root."
+mkdir -p "$MY/themes" "$MY/backgrounds" "$MY/hooks"
+
+get() { sed -n "s/^$1=//p" "$MY/settings" 2>/dev/null | tail -1; }
+put() {
+  touch "$MY/settings"
+  { grep -v "^$1=" "$MY/settings" || true; [ -n "$2" ] && printf '%s=%s\n' "$1" "$2"; } >"$MY/settings.tmp"
+  mv "$MY/settings.tmp" "$MY/settings"
+}
+hook() { [ -x "$MY/hooks/$1" ] && ("$MY/hooks/$1" "${2:-}" >/dev/null 2>&1 &); return 0; }
+ok_name() { [[ "$1" =~ ^[a-z0-9][a-z0-9_-]{0,39}$ ]]; }
+ok_font() { [[ "$1" =~ ^[A-Za-z0-9\ ._-]{1,60}$ ]]; }
+live() { [ -n "${WAYLAND_DISPLAY:-}" ]; }
+
+theme_file() {
+  if [ -f "$MY/themes/$1" ]; then echo "$MY/themes/$1"; elif [ -f "$SYS/themes/$1" ]; then echo "$SYS/themes/$1"; fi
+}
+tval() { # tval FILE KEY DEFAULT: six hex digits, read as data
+  local v; v=$(sed -n "s/^$2=#\{0,1\}\([0-9A-Fa-f]\{6\}\)[[:space:]]*$/\1/p" "$1" 2>/dev/null | tail -1)
+  printf '%s' "${v:-$3}"
+}
+may_write() { [ -n "${FORCE:-}" ] || [ ! -e "$1" ] || head -3 "$1" | grep -q "Managed by Deskmate OS"; }
+app_for() {
+  local v; v=$(get "APP_$1")
+  case "$1" in
+    browser) echo "${v:-chromium}" ;; terminal) echo "${v:-foot}" ;;
+    files) echo "${v:-pcmanfm-qt}" ;; editor) echo "${v:-featherpad}" ;;
+  esac
+}
+
+background_apply() {
+  live || return 0
+  pkill -u "$(id -u)" -x swaybg 2>/dev/null
+  local f; f=$(get BACKGROUND)
+  if [ -n "$f" ] && [ -f "$f" ]; then (swaybg -i "$f" -m fill >/dev/null 2>&1 &)
+  else
+    local t; t=$(theme_file "$(get THEME)"); (swaybg -c "#$(tval "${t:-$SYS/themes/deskmate}" BG 15161a)" >/dev/null 2>&1 &)
+  fi
+}
+
+apply() {
+  local name; name=$(get THEME); name=${name:-deskmate}
+  local f; f=$(theme_file "$name"); [ -n "$f" ] || { name=deskmate; f="$SYS/themes/deskmate"; }
+  local BG BG2 LINE FG DIM ACCENT RED GREEN YELLOW BLUE MODE
+  BG=$(tval "$f" BG 15161a); BG2=$(tval "$f" BG2 1d1e24); LINE=$(tval "$f" LINE 34343e)
+  FG=$(tval "$f" FG e6e6ea); DIM=$(tval "$f" DIM 9a9aa6); ACCENT=$(tval "$f" ACCENT 7c6cf0)
+  RED=$(tval "$f" RED f87171); GREEN=$(tval "$f" GREEN 4ade80); YELLOW=$(tval "$f" YELLOW fbbf24); BLUE=$(tval "$f" BLUE 60a5fa)
+  MODE=$(sed -n 's/^MODE=\(dark\|light\)[[:space:]]*$/\1/p' "$f" | tail -1); MODE=${MODE:-dark}
+  local font mono size pos
+  font=$(get FONT); ok_font "${font:-}" || font="Noto Sans"
+  mono=$(get MONO); ok_font "${mono:-}" || mono="monospace"
+  size=$(get FONT_SIZE); [[ "${size:-}" =~ ^[0-9]{1,2}$ ]] || size=11
+  pos=$(get BAR); [ "$pos" = top ] || pos=bottom
+  mkdir -p "$CFG/foot" "$CFG/waybar" "$CFG/fuzzel" "$CFG/labwc" "$CFG/mako"
+
+  may_write "$CFG/foot/foot.ini" && cat >"$CFG/foot/foot.ini" <<FOOT
+# $MARK
+[main]
+font=$mono:size=$size
+pad=10x10
+[colors]
+background=$BG
+foreground=$FG
+regular0=$BG2
+regular1=$RED
+regular2=$GREEN
+regular3=$YELLOW
+regular4=$BLUE
+regular5=$ACCENT
+regular6=$BLUE
+regular7=$FG
+bright0=$DIM
+bright1=$RED
+bright2=$GREEN
+bright3=$YELLOW
+bright4=$BLUE
+bright5=$ACCENT
+bright6=$BLUE
+bright7=$FG
+selection-foreground=$BG
+selection-background=$ACCENT
+FOOT
+
+  may_write "$CFG/waybar/style.css" && { echo "/* $MARK */"; sed -e "s/@BG@/$BG/g; s/@BG2@/$BG2/g; s/@LINE@/$LINE/g; s/@FG@/$FG/g; s/@DIM@/$DIM/g; s/@ACCENT@/$ACCENT/g; s/@FONT@/$font/g; s/@SIZE@/$((size + 2))/g" "$SYS/waybar-style.css.in"; } >"$CFG/waybar/style.css"
+  may_write "$CFG/waybar/config" && { echo "// $MARK"; sed "s/\"position\": \"bottom\"/\"position\": \"$pos\"/" /etc/xdg/waybar/config; } >"$CFG/waybar/config"
+
+  may_write "$CFG/fuzzel/fuzzel.ini" && cat >"$CFG/fuzzel/fuzzel.ini" <<FUZZEL
+# $MARK
+[main]
+font=$font:size=$((size + 1))
+prompt="> "
+width=44
+lines=12
+horizontal-pad=18
+vertical-pad=14
+inner-pad=8
+[colors]
+background=${BG2}f2
+text=${FG}ff
+match=${ACCENT}ff
+selection=${LINE}ff
+selection-text=${FG}ff
+selection-match=${ACCENT}ff
+border=${ACCENT}ff
+[border]
+width=2
+radius=12
+FUZZEL
+
+  may_write "$CFG/labwc/themerc-override" && cat >"$CFG/labwc/themerc-override" <<LABWC
+# $MARK
+window.active.title.bg.color: #$BG2
+window.inactive.title.bg.color: #$BG
+window.active.label.text.color: #$FG
+window.inactive.label.text.color: #$DIM
+window.active.border.color: #$ACCENT
+window.inactive.border.color: #$LINE
+window.active.button.unpressed.image.color: #$FG
+window.inactive.button.unpressed.image.color: #$DIM
+menu.items.bg.color: #$BG2
+menu.items.text.color: #$FG
+menu.items.active.bg.color: #$ACCENT
+menu.items.active.text.color: #ffffff
+osd.bg.color: #$BG2
+osd.border.color: #$ACCENT
+osd.label.text.color: #$FG
+border.width: 1
+LABWC
+
+  # Keys: the system's list, with yours replacing or adding to it.
+  if may_write "$CFG/labwc/rc.xml"; then
+    local tmpl binds="" combo cmd esc line first=1
+    tmpl=$(sed "s/<font name=\"Noto Sans\" size=\"10\" \/>/<font name=\"$font\" size=\"$((size - 1))\" \/>/" /etc/xdg/labwc/rc.xml)
+    if [ -f "$MY/keys" ]; then
+      while IFS=$'\t' read -r combo cmd; do
+        [[ "$combo" =~ ^([WACS]-)*[A-Za-z0-9_]+$ ]] || continue
+        tmpl=$(printf '%s\n' "$tmpl" | grep -v "<keybind key=\"$combo\">")
+        [ "$cmd" = none ] && continue
+        esc=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+        binds+="    <keybind key=\"$combo\"><action name=\"Execute\" command=\"$esc\" /></keybind>"$'\n'
+      done <"$MY/keys"
+    fi
+    while IFS= read -r line; do
+      case "$line" in *"</keyboard>"*) printf '%s' "$binds" ;; esac
+      printf '%s\n' "$line"
+      if [ -n "$first" ]; then first=; echo "<!-- $MARK -->"; fi
+    done <<<"$tmpl" >"$CFG/labwc/rc.xml"
+  fi
+
+  may_write "$CFG/mako/config" && cat >"$CFG/mako/config" <<MAKO
+# $MARK
+font=$font $size
+background-color=#$BG2
+text-color=#$FG
+border-color=#$ACCENT
+border-radius=10
+border-size=1
+padding=12
+default-timeout=7000
+anchor=top-right
+margin=16
+MAKO
+
+  if live; then
+    labwc --reconfigure 2>/dev/null
+    if [ "$(get BAR_HIDDEN)" = 1 ]; then pkill -u "$(id -u)" -x waybar 2>/dev/null
+    elif pgrep -u "$(id -u)" -x waybar >/dev/null; then pkill -u "$(id -u)" -USR2 -x waybar
+    else (waybar >/dev/null 2>&1 &); fi
+    background_apply
+    command -v makoctl >/dev/null && makoctl reload 2>/dev/null
+    local dark=true; [ "$MODE" = light ] && dark=false
+    /opt/deskmate/dm call settings.update "{\"darkMode\":$dark}" >/dev/null 2>&1
+  fi
+}
+
+display_apply() {
+  live && command -v wlr-randr >/dev/null || return 0
+  local out scale res; out=$(wlr-randr 2>/dev/null | awk 'NR==1{print $1}'); [ -n "$out" ] || return 0
+  scale=$(get SCALE); res=$(get RESOLUTION)
+  [ -n "$res" ] && wlr-randr --output "$out" --mode "$res" 2>/dev/null
+  [ -n "$scale" ] && wlr-randr --output "$out" --scale "$scale" 2>/dev/null
+  return 0
+}
+
+toggles_apply() {
+  live || return 0
+  pkill -u "$(id -u)" -x wlsunset 2>/dev/null; pkill -u "$(id -u)" -x swayidle 2>/dev/null
+  [ "$(get NIGHTLIGHT)" = 1 ] && command -v wlsunset >/dev/null && (wlsunset -S 07:00 -s 19:00 -t 4000 >/dev/null 2>&1 &)
+  [ "$(get IDLE)" != 0 ] && command -v swayidle >/dev/null && (swayidle -w timeout 900 'swaylock -f -c 000000' >/dev/null 2>&1 &)
+  return 0
+}
+
+cmd="${1:-status}"; shift 2>/dev/null || true
+args=(); for a in "$@"; do [ "$a" = --quiet ] || args+=("$a"); done
+set -- "${args[@]+"${args[@]}"}"
+
+case "$cmd" in
+  apply) apply ;;
+  session) # called once when the desktop starts
+    display_apply; apply; toggles_apply; hook login ;;
+  get) get "${1:-}" ;;
+  open) k="${1:-}"; p=$(app_for "$k"); [ -n "$p" ] || die "Open what? browser, terminal, files or editor."; shift; exec $p "$@" ;;
+
+  theme)
+    case "${1:-list}" in
+      list) { ls "$SYS/themes"; ls "$MY/themes" 2>/dev/null | sed 's/$/ (yours)/'; } | sort -u ;;
+      current) t=$(get THEME); echo "${t:-deskmate}" ;;
+      set)
+        ok_name "${2:-}" && [ -n "$(theme_file "$2")" ] || die "No theme named '${2:-}'. See: deskmate-os theme list"
+        put THEME "$2"
+        # A theme can bring its own background.
+        for e in png jpg jpeg; do [ -f "$MY/backgrounds/theme-$2.$e" ] && put BACKGROUND "$MY/backgrounds/theme-$2.$e"; done
+        apply; hook theme-set "$2"; say "Theme: $2" ;;
+      new) # theme new <name> [from <base>] KEY=hex ...
+        n="${2:-}"; ok_name "$n" || die "Theme names: lowercase letters, digits, - and _."
+        [ -f "$SYS/themes/$n" ] && die "$n is a built-in theme. Pick another name."
+        shift 2; base=$(get THEME); base=${base:-deskmate}
+        if [ "${1:-}" = from ]; then base="${2:-}"; shift 2; fi
+        bf=$(theme_file "$base"); [ -n "$bf" ] || die "No theme named '$base' to start from."
+        { echo "NAME=$n"
+          for k in MODE BG BG2 LINE FG DIM ACCENT RED GREEN YELLOW BLUE; do
+            v=""; for kv in "$@"; do [ "${kv%%=*}" = "$k" ] && v="${kv#*=}"; done
+            v="${v#\#}"
+            if [ "$k" = MODE ]; then
+              [[ "$v" =~ ^(dark|light)$ ]] || v=$(sed -n 's/^MODE=\(dark\|light\)[[:space:]]*$/\1/p' "$bf" | tail -1)
+              echo "MODE=${v:-dark}"
+            else
+              [[ "$v" =~ ^[0-9A-Fa-f]{6}$ ]] || v=$(tval "$bf" "$k" 808080)
+              echo "$k=$v"
+            fi
+          done; } >"$MY/themes/$n"
+        say "Made theme $n (from $base). Use it with: deskmate-os theme set $n" ;;
+      install) # a folder or git address holding a "theme" file, and maybe background.png/jpg
+        src="${2:-}"; [ -n "$src" ] || die "Give a folder, or a git address starting with https://"
+        tmp=""
+        case "$src" in
+          https://*)
+            [[ "$src" =~ ^https://[A-Za-z0-9._~/-]+$ ]] || die "That address has characters a git address shouldn't."
+            tmp=$(mktemp -d); git clone -q --depth 1 -- "$src" "$tmp/t" 2>/dev/null || { rm -rf "$tmp"; die "Couldn't fetch $src"; }
+            dir="$tmp/t"; n=$(basename "$src" .git) ;;
+          *) dir=$(realpath -e "$src" 2>/dev/null) && [ -d "$dir" ] || die "That folder isn't there."; n=$(basename "$dir") ;;
+        esac
+        n=$(printf '%s' "$n" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-' | sed 's/^-*//; s/-*$//' | cut -c1-40)
+        ok_name "$n" && [ ! -f "$SYS/themes/$n" ] || { rm -rf "$tmp"; die "Can't use '$n' as a theme name."; }
+        tf=""; for c in theme "$n" colors; do [ -f "$dir/$c" ] && { tf="$dir/$c"; break; }; done
+        [ -n "$tf" ] || { rm -rf "$tmp"; die "No 'theme' file in there. It needs lines like BG=1a1b26 and ACCENT=7aa2f7."; }
+        { echo "NAME=$n"; m=$(sed -n 's/^MODE=\(dark\|light\)[[:space:]]*$/\1/p' "$tf" | tail -1); echo "MODE=${m:-dark}"
+          for k in BG BG2 LINE FG DIM ACCENT RED GREEN YELLOW BLUE; do echo "$k=$(tval "$tf" "$k" "$(tval "$SYS/themes/deskmate" "$k" 808080)")"; done; } >"$MY/themes/$n"
+        for e in png jpg jpeg; do
+          b="$dir/background.$e"
+          [ -f "$b" ] && [ "$(stat -c %s "$b")" -lt 40000000 ] && cp "$b" "$MY/backgrounds/theme-$n.$e"
+        done
+        rm -rf "$tmp"; say "Installed theme $n. Use it with: deskmate-os theme set $n" ;;
+      remove)
+        ok_name "${2:-}" && [ -f "$MY/themes/$2" ] || die "'${2:-}' isn't one of your themes (built-in themes stay)."
+        rm -f "$MY/themes/$2" "$MY/backgrounds/theme-$2".*
+        [ "$(get THEME)" = "$2" ] && { put THEME deskmate; apply; }
+        say "Removed theme $2." ;;
+      *) die "theme list | current | set <name> | new <name> [from <base>] KEY=hex... | install <folder or https git address> | remove <name>" ;;
+    esac ;;
+
+  background)
+    case "${1:-list}" in
+      list) cur=$(get BACKGROUND); echo "Now: ${cur:-$PLAIN}"; ls "$MY/backgrounds" 2>/dev/null ;;
+      set)
+        f=$(realpath -e "${2:-}" 2>/dev/null) && [ -f "$f" ] || { [ -f "$MY/backgrounds/${2:-}" ] && f="$MY/backgrounds/$2"; } || die "That picture isn't there."
+        case "${f,,}" in *.png|*.jpg|*.jpeg) ;; *) die "Use a .png or .jpg picture." ;; esac
+        [ "$(stat -c %s "$f")" -lt 40000000 ] || die "That picture is over 40 MB."
+        n=$(basename "$f" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-80)
+        [ "$f" = "$MY/backgrounds/$n" ] || cp "$f" "$MY/backgrounds/$n"
+        put BACKGROUND "$MY/backgrounds/$n"; background_apply; hook background-set "$n"; say "Background: $n" ;;
+      next)
+        mapfile -t all < <(ls "$MY/backgrounds" 2>/dev/null); [ ${#all[@]} -gt 0 ] || die "No pictures yet. Add one with: deskmate-os background set <picture>"
+        cur=$(basename "$(get BACKGROUND)" 2>/dev/null); nxt="${all[0]}"
+        for i in "${!all[@]}"; do [ "${all[$i]}" = "$cur" ] && nxt="${all[$(((i + 1) % ${#all[@]}))]}"; done
+        put BACKGROUND "$MY/backgrounds/$nxt"; background_apply; hook background-set "$nxt"; say "Background: $nxt" ;;
+      none|color|colour) put BACKGROUND ""; background_apply; say "Background: the theme's colour" ;;
+      *) die "background list | set <picture> | next | none" ;;
+    esac ;;
+
+  font)
+    case "${1:-list}" in
+      list) echo "Now: $(get FONT || true) / terminal: $(get MONO || true) / size: $(get FONT_SIZE || true)"; fc-list : family | sed 's/,.*//' | sort -u ;;
+      set|mono)
+        fam="${2:-}"; ok_font "$fam" || die "Give a font name, like: deskmate-os font set \"Noto Sans\" 11"
+        fc-list : family | grep -qiF "$fam" || die "No font named '$fam' here. See: deskmate-os font list (more fonts: deskmate-os pkg install fonts-...)"
+        [ "$1" = mono ] && put MONO "$fam" || put FONT "$fam"
+        [ -n "${3:-}" ] && { [[ "$3" =~ ^[0-9]{1,2}$ ]] && [ "$3" -ge 6 ] && [ "$3" -le 40 ] || die "Sizes go from 6 to 40."; put FONT_SIZE "$3"; }
+        apply; hook font-set "$fam"; say "Font: $fam" ;;
+      size) [[ "${2:-}" =~ ^[0-9]{1,2}$ ]] && [ "$2" -ge 6 ] && [ "$2" -le 40 ] || die "Sizes go from 6 to 40."; put FONT_SIZE "$2"; apply; say "Font size: $2" ;;
+      *) die "font list | set \"<name>\" [size] | mono \"<name>\" | size <n>" ;;
+    esac ;;
+
+  keys)
+    case "${1:-list}" in
+      list)
+        echo "Keys (W = Super, A = Alt, C = Ctrl, S = Shift). Yours are marked *."
+        grep -o '<keybind key="[^"]*"><action name="[^"]*"\( command="[^"]*"\)\{0,1\}' "$CFG/labwc/rc.xml" 2>/dev/null | sed 's/<keybind key="\([^"]*\)"><action name="\([^"]*\)"\( command="\([^"]*\)"\)\{0,1\}/\1\t\4\t\2/' | while IFS=$'\t' read -r k c a; do
+          star=" "; grep -q "^$k	" "$MY/keys" 2>/dev/null && star="*"
+          printf '%s %-22s %s\n' "$star" "$k" "${c:-$a}"
+        done ;;
+      set)
+        k="${2:-}"; [[ "$k" =~ ^([WACS]-)*[A-Za-z0-9_]+$ ]] || die "Keys look like W-g, C-A-t or W-S-Return (W = Super, A = Alt, C = Ctrl, S = Shift)."
+        shift 2; c="$*"; [ -n "$c" ] || die "Give the command to run, like: deskmate-os keys set W-g featherpad"
+        case "$c" in *$'\n'*|*$'\t'*) die "The command must be one line." ;; esac
+        touch "$MY/keys"; { grep -v "^$k	" "$MY/keys" || true; printf '%s\t%s\n' "$k" "$c"; } >"$MY/keys.tmp"; mv "$MY/keys.tmp" "$MY/keys"
+        apply; say "$k now runs: $c" ;;
+      unbind) k="${2:-}"; [[ "$k" =~ ^([WACS]-)*[A-Za-z0-9_]+$ ]] || die "Which key?"
+        touch "$MY/keys"; { grep -v "^$k	" "$MY/keys" || true; printf '%s\tnone\n' "$k"; } >"$MY/keys.tmp"; mv "$MY/keys.tmp" "$MY/keys"; apply; say "$k does nothing now." ;;
+      remove) k="${2:-}"; [ -f "$MY/keys" ] && { grep -v "^$k	" "$MY/keys" >"$MY/keys.tmp" || true; mv "$MY/keys.tmp" "$MY/keys"; }; apply; say "$k is back to its default." ;;
+      reset) rm -f "$MY/keys"; apply; say "All keys are back to their defaults." ;;
+      *) die "keys list | set <key> <command> | unbind <key> | remove <key> | reset" ;;
+    esac ;;
+
+  bar)
+    case "${1:-}" in
+      top|bottom) put BAR "$1"; pkill -u "$(id -u)" -x waybar 2>/dev/null; apply; say "The bar is at the $1." ;;
+      hide) put BAR_HIDDEN 1; apply; say "The bar is hidden." ;;
+      show) put BAR_HIDDEN ""; apply; say "The bar is showing." ;;
+      toggle) [ "$(get BAR_HIDDEN)" = 1 ] && put BAR_HIDDEN "" || put BAR_HIDDEN 1; apply ;;
+      *) die "bar top | bottom | hide | show | toggle   (its layout: edit $CFG/waybar/config and delete its first line)" ;;
+    esac ;;
+
+  toggle)
+    case "${1:-}" in
+      nightlight) command -v wlsunset >/dev/null || die "Night light needs: deskmate-os pkg install wlsunset"
+        [ "$(get NIGHTLIGHT)" = 1 ] && put NIGHTLIGHT "" || put NIGHTLIGHT 1; toggles_apply; say "Night light: $([ "$(get NIGHTLIGHT)" = 1 ] && echo "on (warm colours from 7 pm to 7 am)" || echo off)" ;;
+      idle) [ "$(get IDLE)" = 0 ] && put IDLE "" || put IDLE 0; toggles_apply; say "Locking after 15 idle minutes: $([ "$(get IDLE)" = 0 ] && echo off || echo on)" ;;
+      bar) exec "$0" bar toggle ;;
+      *) die "toggle nightlight | idle | bar" ;;
+    esac ;;
+
+  display)
+    case "${1:-list}" in
+      list) wlr-randr 2>/dev/null || die "Run this on the desktop." ;;
+      scale) [[ "${2:-}" =~ ^[0-3](\.[0-9]{1,2})?$ ]] && [ "${2%%.*}" -ge 0 ] && [ "$2" != 0 ] || die "Scale is a number like 1, 1.25, 1.5 or 2."; put SCALE "$2"; display_apply; say "Scale: $2" ;;
+      resolution) [[ "${2:-}" =~ ^[0-9]{3,4}x[0-9]{3,4}$ ]] || die "Resolution looks like 1920x1080."; put RESOLUTION "$2"; display_apply; say "Resolution: $2" ;;
+      *) die "display list | scale <n> | resolution <WxH>" ;;
+    esac ;;
+
+  default)
+    k="${1:-}"; p="${2:-}"
+    case "$k" in browser|terminal|files|editor) ;; *) die "default browser|terminal|files|editor <program>" ;; esac
+    [[ "$p" =~ ^[A-Za-z0-9._+-]{1,60}$ ]] && command -v "$p" >/dev/null || die "No program named '$p' here. Install it first: deskmate-os pkg install <package>"
+    put "APP_$k" "$p"; [ "$k" = browser ] && xdg-settings set default-web-browser "$p.desktop" 2>/dev/null
+    say "Your $k is now $p." ;;
+
+  hooks)
+    case "${1:-list}" in
+      list) echo "Hooks run after something happens (theme-set, font-set, background-set, login):"; for h in "$MY/hooks"/*; do [ -x "$h" ] && echo "  $(basename "$h"): $(sed -n 2p "$h")"; done ;;
+      set) e="${2:-}"; case "$e" in theme-set|font-set|background-set|login) ;; *) die "Hooks: theme-set, font-set, background-set, login." ;; esac
+        shift 2; c="$*"; [ -n "$c" ] || die "Give the command to run."
+        case "$c" in *$'\n'*) die "The command must be one line." ;; esac
+        printf '#!/bin/sh\n%s\n' "$c" >"$MY/hooks/$e"; chmod 700 "$MY/hooks/$e"; say "After $e, this runs: $c" ;;
+      remove) rm -f "$MY/hooks/$(basename "${2:-none}")"; say "Removed." ;;
+      *) die "hooks list | set <event> <command> | remove <event>" ;;
+    esac ;;
+
+  webapp)
+    apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"; mkdir -p "$apps"
+    slug() { printf '%s' "$1" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-' | cut -c1-40; }
+    case "${1:-list}" in
+      add)
+        n="${2:-}"; u="${3:-}"
+        [[ "$n" =~ ^[A-Za-z0-9\ ._-]{1,40}$ ]] && [ -n "$(slug "$n")" ] || die "Names: letters, digits, spaces, . _ - (40 at most)."
+        [[ "$u" =~ ^https?://[A-Za-z0-9._~:/?#=%\&+@,-]{3,400}$ ]] || die "The address must start with https:// and be a plain web address."
+        printf '[Desktop Entry]\nType=Application\nName=%s\nComment=Web app\nExec=chromium "--app=%s" --class=webapp-%s\nIcon=applications-internet\nCategories=Network;\n' "$n" "$u" "$(slug "$n")" >"$apps/webapp-$(slug "$n").desktop"
+        say "Added $n. Find it in the launcher (Super+Space)." ;;
+      remove) rm -f "$apps/webapp-$(slug "${2:-}").desktop"; say "Removed ${2:-}." ;;
+      list) ls "$apps" 2>/dev/null | sed -n 's/^webapp-\(.*\)\.desktop$/\1/p' ;;
+      *) die 'webapp add "<name>" <address> | remove "<name>" | list' ;;
+    esac ;;
+
+  pkg)
+    case "${1:-}" in
+      search) apt-cache search -- "${2:-}" | head -40 ;;
+      install|remove) exec sudo /usr/local/sbin/deskmate-pkg "$@" ;;
+      *) die "pkg search <word> | install <package>... | remove <package>...   (system software, from Debian; admins only)" ;;
+    esac ;;
+
+  refresh) # back to how Deskmate OS ships
+    case "${1:-}" in
+      theme) put THEME ""; put BACKGROUND "" ;;
+      fonts) put FONT ""; put MONO ""; put FONT_SIZE "" ;;
+      keys) rm -f "$MY/keys" ;;
+      bar) put BAR ""; put BAR_HIDDEN "" ;;
+      all) rm -f "$MY/settings" "$MY/keys"
+        for f in foot/foot.ini waybar/style.css waybar/config fuzzel/fuzzel.ini labwc/themerc-override labwc/rc.xml mako/config; do
+          [ -e "$CFG/$f" ] && ! head -3 "$CFG/$f" | grep -q "Managed by Deskmate OS" && cp "$CFG/$f" "$CFG/$f.bak"
+        done; FORCE=1 ;;
+      *) die "refresh theme | fonts | keys | bar | all   (all also replaces files you edited by hand, keeping a .bak copy)" ;;
+    esac
+    apply; toggles_apply; say "Back to the defaults for: $1" ;;
+
+  status)
+    t=$(get THEME); b=$(get BACKGROUND)
+    echo "Theme: ${t:-deskmate}"
+    echo "Background: ${b:-$PLAIN}"
+    fo=$(get FONT); mo=$(get MONO); sz=$(get FONT_SIZE)
+    echo "Font: ${fo:-Noto Sans} / terminal: ${mo:-monospace} / size: ${sz:-11}"
+    echo "Bar: $([ "$(get BAR)" = top ] && echo top || echo bottom)$([ "$(get BAR_HIDDEN)" = 1 ] && echo ', hidden')"
+    echo "Display: scale $(get SCALE) $(get RESOLUTION)" | sed 's/scale  *$/default/'
+    echo "Night light: $([ "$(get NIGHTLIGHT)" = 1 ] && echo on || echo off); lock when idle: $([ "$(get IDLE)" = 0 ] && echo off || echo on)"
+    echo "Apps: browser $(app_for browser), terminal $(app_for terminal), files $(app_for files), editor $(app_for editor)"
+    echo "Your keys:"; [ -s "$MY/keys" ] && sed 's/^/  /; s/\t/  ->  /' "$MY/keys" || echo "  (none; see: deskmate-os keys list)"
+    echo "Your themes: $(ls "$MY/themes" 2>/dev/null | tr '\n' ' ')"
+    echo "Hooks: $(for h in "$MY/hooks"/*; do [ -x "$h" ] && printf '%s ' "$(basename "$h")"; done)"
+    echo "Web apps: $("$0" webapp list | tr '\n' ' ')" ;;
+
+  *) die "deskmate-os theme | background | font | keys | bar | toggle | display | default | hooks | webapp | pkg | refresh | look" ;;
+esac

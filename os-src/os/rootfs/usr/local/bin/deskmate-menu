@@ -13,7 +13,7 @@ shot() {
 }
 case "$1" in
   hotkeys) exec foot -T Hotkeys -W 84x30 less -R /usr/share/deskmate-os/hotkeys.txt ;;
-  theme) t=$(deskmate-theme list | pick "Theme"); [ -n "$t" ] && deskmate-theme "$t"; exit 0 ;;
+  theme) t=$(deskmate-custom theme list | pick "Theme"); [ -n "$t" ] && deskmate-custom theme set "${t%% *}"; exit 0 ;;
   power)
     case "$(printf 'Lock\nLog out\nRestart\nShut down\n' | pick "Power")" in
       Lock) swaylock -f -c 000000 ;;
@@ -33,6 +33,15 @@ Terminal
 Files
 Browser
 Style: theme
+Style: font
+Style: next background
+Style: bar at the top
+Style: bar at the bottom
+Style: hide or show the bar
+Style: night light on or off
+Style: back to the defaults
+Setup: keys (list)
+Setup: install software
 Screenshot: area
 Screenshot: whole screen
 Web app: add a website as an app
@@ -57,15 +66,24 @@ case "$choice" in
   Deskmate) deskmate-desktop deskmate ;;
   "Linux desktop") deskmate-desktop linux ;;
   Apps) fuzzel ;;
-  Terminal) foot ;;
-  Files) pcmanfm-qt ;;
-  Browser) chromium ;;
+  Terminal) deskmate-custom open terminal ;;
+  Files) deskmate-custom open files ;;
+  Browser) deskmate-custom open browser ;;
   "Style: theme") exec "$0" theme ;;
+  "Style: font") fnt=$(fc-list : family | sed 's/,.*//' | sort -u | pick "Font"); [ -n "$fnt" ] && deskmate-custom font set "$fnt" ;;
+  "Style: next background") deskmate-custom background next || term "Background" "echo 'Add a picture first: deskmate-os background set <picture>'" ;;
+  "Style: bar at the top") deskmate-custom bar top ;;
+  "Style: bar at the bottom") deskmate-custom bar bottom ;;
+  "Style: hide or show the bar") deskmate-custom bar toggle ;;
+  "Style: night light on or off") deskmate-custom toggle nightlight ;;
+  "Style: back to the defaults") deskmate-custom refresh all ;;
+  "Setup: keys (list)") term "Keys" "deskmate-custom keys list; echo; echo 'Change one: deskmate-os keys set W-g <command>'" ;;
+  "Setup: install software") p=$(printf '' | pick "Package"); [ -n "$p" ] && term "Install" "deskmate-custom pkg install $(printf '%s' "$p" | tr -cd 'a-z0-9+. -')" ;;
   "Screenshot: area") shot area ;;
   "Screenshot: whole screen") sleep 0.4; shot full ;;
   "Web app:"*)
     n=$(printf '' | pick "Name"); [ -n "$n" ] || exit 0
-    u=$(printf 'https://' | pick "Address"); [ -n "$u" ] && deskmate-webapp add "$n" "$u" ;;
+    u=$(printf 'https://' | pick "Address"); [ -n "$u" ] && deskmate-custom webapp add "$n" "$u" ;;
   "Bots: stop"*) deskmate-os stop-bots ;;
   "Bots: turn their network off") term "Bot network" "sudo deskmate-os net off" ;;
   "Bots: turn their network on") term "Bot network" "sudo deskmate-os net on" ;;

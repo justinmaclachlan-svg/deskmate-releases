@@ -1,5 +1,6 @@
 PASS  the host's Deskmate packs a clone
 PASS  the clone holds no secret values
+test VM: hardware virtualization
 PASS  first start set up the computer and SSH answers for the Bots' account
 PASS  nothing started a desktop before anyone logged in
 PASS  Deskmate is running as the person
@@ -11,6 +12,11 @@ PASS  the cloned Bot is in the VM's Deskmate
 PASS  the cloned skill is there and passed review
 PASS  the dangerous skill was blocked by the review
 PASS  no secret came over
+PASS  a person can change the theme, a key and the bar
+PASS  an admin can install system software with one command
+PASS  the Bots' account can't install system software itself
+PASS  the Bots can't read the person's settings or keys
+PASS  the customizing skill is installed for Bots and passed its own review
 PASS  the AI coding tools are installed but not signed in
 PASS  the Bots' account is not root
 PASS  the Bots' account has no sudo

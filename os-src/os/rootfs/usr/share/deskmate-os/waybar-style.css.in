@@ -1,4 +1,4 @@
-* { font-family: "Noto Sans", sans-serif; font-size: 13px; min-height: 0; }
+* { font-family: "@FONT@", sans-serif; font-size: @SIZE@px; min-height: 0; }
 window#waybar { background: #@BG2@; color: #@FG@; border-top: 1px solid #@LINE@; }
 #custom-menu, #custom-files, #custom-browser, #custom-terminal, #custom-power, #cpu, #memory, #clock { padding: 0 10px; color: #@DIM@; }
 #custom-menu { color: #@FG@; font-weight: 600; }

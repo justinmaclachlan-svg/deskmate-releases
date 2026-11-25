@@ -17,8 +17,14 @@ Deskmate OS hotkeys            (Super is the Windows key)
   Shift + Print        Screenshot of the whole screen
   Super + Ctrl + V     Clipboard history
   Super + Ctrl + Shift + Space   Pick a theme
+  Super + Ctrl + Space           Next background picture
+  Super + Shift + Space          Hide or show the bar
   Super + Esc          Stop everything your Bots are running, right now
 
+Change any key:  deskmate-os keys set W-g <command>   (W Super, A Alt, C Ctrl, S Shift)
+Or tell a Bot: "make Super+G open the editor", "switch to the nord theme".
+
 In a terminal:
+  deskmate-os look     Everything you've customized (and how to change it)
   deskmate-os help     Users, sharing folders with Bots, Bot network, updates
   sudo -i  or  su -    A root shell (admins use sudo; root has its own password)

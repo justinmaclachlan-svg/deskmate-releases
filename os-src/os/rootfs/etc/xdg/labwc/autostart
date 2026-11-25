@@ -1,10 +1,8 @@
 # Deskmate OS desktop: wallpaper, taskbar, notifications, clipboard history,
 # the hot corner, then Deskmate itself, full screen.
-. "$HOME/.config/deskmate-os/theme" 2>/dev/null
-swaybg -c "#${BG:-15161a}" >/dev/null 2>&1 &
-waybar >/dev/null 2>&1 &
+# Your look and settings: background, bar, display, night light, idle lock.
+deskmate-custom session --quiet &
 command -v mako >/dev/null && mako >/dev/null 2>&1 &
 command -v cliphist >/dev/null && wl-paste --watch cliphist store >/dev/null 2>&1 &
-command -v swayidle >/dev/null && swayidle -w timeout 900 'swaylock -f -c 000000' >/dev/null 2>&1 &
 /opt/deskmate/deskmate --corner >/dev/null 2>&1 &
 deskmate-desktop start &

@@ -2,7 +2,8 @@
 Description=Deskmate OS first-start setup
 ConditionPathExists=!/var/lib/deskmate-os/setup-done
 After=systemd-user-sessions.service local-fs.target systemd-udev-settle.service
-Before=greetd.service getty@tty1.service
+# SSH waits too: its keys and the first accounts are made here.
+Before=greetd.service getty@tty1.service ssh.service
 Conflicts=getty@tty1.service
 
 [Service]

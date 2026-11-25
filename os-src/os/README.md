@@ -40,6 +40,37 @@ can use it. `-NoClone` starts with a fresh Deskmate. Later copies:
   back. The Linux desktop has a taskbar, a launcher, files, a browser, a terminal.
 - **Super+Alt+Space**: the Deskmate OS menu. **Super+K**: every hotkey.
 
+## Make it yours
+
+Everything is per person, and you can do it yourself or ask a Bot ("use the
+nord theme", "make my own theme with an orange accent", "make Super+G open the
+editor", "put the bar at the top", "install JetBrains Mono and use it").
+
+| What | How |
+|---|---|
+| Themes | 7 built in. `deskmate-os theme set <name>`, make your own with `theme new <name> from <base> ACCENT=ff7755 ...`, or `theme install <folder or https git address>`. One theme restyles the terminal, bar, launcher, windows, notifications and Deskmate. |
+| Backgrounds | `deskmate-os background set <picture>`, `next` (Super+Ctrl+Space), `none` |
+| Fonts | `deskmate-os font set "<name>" [size]`, `font mono "<name>"` |
+| Keys | `deskmate-os keys set W-g <command>`, `unbind`, `remove`, `reset`, `list` |
+| Bar | `deskmate-os bar top`, `bottom`, `hide`, `show`; its layout is `~/.config/waybar/config` |
+| Display | `deskmate-os display scale 1.5`, `display resolution 1920x1080` |
+| Default apps | `deskmate-os default browser <program>` (also terminal, files, editor) |
+| Toggles | `deskmate-os toggle nightlight`, `idle`, `bar` |
+| Hooks | `deskmate-os hooks set theme-set <command>` (also font-set, background-set, login) |
+| Web apps | `deskmate-os webapp add "<name>" <address>` |
+| Software | `deskmate-os pkg install <package>` (Debian's packages; admins) |
+| Start over | `deskmate-os refresh theme`, `fonts`, `keys`, `bar`, `all` |
+
+The files it writes start with a "Managed by Deskmate OS" line. Delete that
+line in any of them and it's yours to edit by hand; Deskmate OS leaves it alone.
+
+**When a Bot does it.** Looks (theme, background, font, bar, display, web
+apps) go through like any other change a Bot makes. Three things always ask
+you first, whatever your approval rules say, and show exactly what will happen:
+a key or hook (its command runs as you), system software (it's for the whole
+computer, and Deskmate installs it without the Bot getting root), and a new
+plugin (scanned first; a blocked one is never offered).
+
 ## Accounts
 
 | Account | What it's for |

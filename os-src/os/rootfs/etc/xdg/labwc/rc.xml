@@ -14,13 +14,15 @@
     <keybind key="W-A-space"><action name="Execute" command="deskmate-menu" /></keybind>
     <keybind key="W-k"><action name="Execute" command="deskmate-menu hotkeys" /></keybind>
     <keybind key="W-d"><action name="Execute" command="deskmate-desktop toggle" /></keybind>
-    <keybind key="W-Return"><action name="Execute" command="foot" /></keybind>
-    <keybind key="C-A-t"><action name="Execute" command="foot" /></keybind>
-    <keybind key="W-b"><action name="Execute" command="chromium" /></keybind>
-    <keybind key="W-f"><action name="Execute" command="pcmanfm-qt" /></keybind>
+    <keybind key="W-Return"><action name="Execute" command="deskmate-custom open terminal" /></keybind>
+    <keybind key="C-A-t"><action name="Execute" command="deskmate-custom open terminal" /></keybind>
+    <keybind key="W-b"><action name="Execute" command="deskmate-custom open browser" /></keybind>
+    <keybind key="W-f"><action name="Execute" command="deskmate-custom open files" /></keybind>
     <keybind key="W-q"><action name="Close" /></keybind>
     <keybind key="W-l"><action name="Execute" command="swaylock -f -c 000000" /></keybind>
     <keybind key="W-C-S-space"><action name="Execute" command="deskmate-menu theme" /></keybind>
+    <keybind key="W-C-space"><action name="Execute" command="deskmate-custom background next" /></keybind>
+    <keybind key="W-S-space"><action name="Execute" command="deskmate-custom bar toggle" /></keybind>
     <keybind key="W-C-v"><action name="Execute" command="deskmate-menu clipboard" /></keybind>
     <keybind key="W-Escape"><action name="Execute" command="deskmate-os stop-bots" /></keybind>
     <keybind key="Print"><action name="Execute" command="deskmate-menu screenshot-area" /></keybind>

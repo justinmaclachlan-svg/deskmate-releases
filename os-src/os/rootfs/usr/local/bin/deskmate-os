@@ -28,6 +28,24 @@ deskmate-os: manage this computer.
                                      also install themselves every day)
   sudo deskmate-os host-key "<key>"  Let Deskmate on the host PC use your Bots' account
 
+Make it yours (each person has their own; your Bots can do these for you too):
+  deskmate-os look                   Everything you've set
+  deskmate-os theme list | set <name> | new <name> [from <base>] ACCENT=ff7755 ...
+                    | install <folder or https git address> | remove <name>
+  deskmate-os background set <picture> | next | none
+  deskmate-os font set "<name>" [size] | mono "<name>" | size <n> | list
+  deskmate-os keys list | set <key> <command> | unbind <key> | remove <key> | reset
+  deskmate-os bar top | bottom | hide | show
+  deskmate-os display scale <n> | resolution <WxH> | list
+  deskmate-os default browser|terminal|files|editor <program>
+  deskmate-os toggle nightlight | idle | bar
+  deskmate-os hooks list | set <theme-set|font-set|background-set|login> <command>
+  deskmate-os webapp add "<name>" <address> | remove "<name>" | list
+  deskmate-os pkg search <word> | install <package>... | remove <package>...
+  deskmate-os refresh theme | fonts | keys | bar | all     Back to the defaults
+Files it writes (~/.config/foot, waybar, fuzzel, labwc, mako) start with a
+"Managed by Deskmate OS" line. Delete that line in a file to edit it by hand.
+
 Every person has a login and a second, locked-down account for their Bots
 (<name>-bots): no password, no sudo, and no access to the person's home.
 Root has its own password and is for the terminal only.
@@ -191,6 +209,8 @@ status() {
 case "${1:-help}" in
   help|-h|--help) help ;;
   status) status ;;
+  look) exec deskmate-custom status ;;
+  theme|background|font|keys|bar|display|default|toggle|hooks|webapp|pkg|refresh) exec deskmate-custom "$@" ;;
   users) users_menu ;;
   user) case "${2:-}" in add) user_add "${3:-}" "${4:-}" ;; del|remove) user_del "${3:-}" ;; *) help ;; esac ;;
   share) share "${2:-}" on ;;

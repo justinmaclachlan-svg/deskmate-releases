@@ -10,10 +10,10 @@ mkdir -p "$OUT" "$ROOT"
 
 # What must be there, and what's nice to have (skipped if Debian doesn't carry it).
 BASE="linux-image-amd64 grub-efi-amd64 grub-efi-amd64-signed shim-signed systemd systemd-sysv systemd-resolved systemd-timesyncd dbus dbus-user-session libpam-systemd udev kmod iproute2 iputils-ping netbase ca-certificates curl wget sudo acl locales tzdata less nano bash-completion openssh-server procps psmisc file zip unzip xz-utils git whiptail cloud-guest-utils e2fsprogs dosfstools nftables unattended-upgrades initramfs-tools zstd"
-DESKTOP="labwc foot waybar fuzzel swaybg grim slurp wtype wlrctl wl-clipboard xwayland pcmanfm-qt featherpad xdg-utils xdg-user-dirs fonts-noto-core fonts-dejavu-core fonts-noto-mono adwaita-icon-theme libgl1-mesa-dri libegl1 libgles2 libwayland-egl1 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 chromium libnotify-bin"
+DESKTOP="labwc foot waybar fuzzel swaybg grim slurp wtype wlrctl wlr-randr fontconfig wl-clipboard xwayland pcmanfm-qt featherpad xdg-utils xdg-user-dirs fonts-noto-core fonts-dejavu-core fonts-noto-mono adwaita-icon-theme libgl1-mesa-dri libegl1 libgles2 libwayland-egl1 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 chromium libnotify-bin"
 DEV="build-essential python3 python3-venv python3-pip pipx nodejs npm bubblewrap binutils gdb strace ltrace jq ripgrep tmux"
 SECURITY="clamav clamav-freshclam shellcheck debsecan"
-OPTIONAL="hyperv-daemons greetd tuigreet mako-notifier cliphist swaylock swayidle btop neovim lazygit fzf fd-find bat gh bandit python3-bandit gitleaks yara lynis radare2 rizin"
+OPTIONAL="wlsunset fonts-jetbrains-mono fonts-firacode fonts-cascadia-code fonts-inter hyperv-daemons greetd tuigreet mako-notifier cliphist swaylock swayidle btop neovim lazygit fzf fd-find bat gh bandit python3-bandit gitleaks yara lynis radare2 rizin"
 
 truncate -s "$SIZE" "$IMG"
 sgdisk -Z "$IMG" >/dev/null
@@ -67,6 +67,8 @@ cp -R --preserve=mode "$HERE/rootfs/." "$ROOT/"
 install -d "$ROOT/etc/chromium.d"
 echo 'export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --ozone-platform-hint=auto"' >"$ROOT/etc/chromium.d/deskmate"
 chmod 755 "$ROOT"/usr/local/bin/deskmate-* "$ROOT"/usr/local/sbin/deskmate-*
+chmod 440 "$ROOT"/etc/sudoers.d/deskmate-pkg; chown root:root "$ROOT"/etc/sudoers.d/deskmate-pkg
+in_root visudo -cq -f /etc/sudoers.d/deskmate-pkg
 cat >"$ROOT/usr/share/applications/deskmate.desktop" <<'DESK'
 [Desktop Entry]
 Type=Application

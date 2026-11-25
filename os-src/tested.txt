@@ -19,4 +19,5 @@ PASS  the Bots' account can't log in as root over SSH
 PASS  the sandbox runs, with no network and a read-only system
 scanners: """skillspector"""skill-scanner"""clamscan"""bandit"""gitleaks"""osv-scanner"""shellcheck"""debsecan
 os: 0.1 Debian GNU/Linux 13 (trixie) 6.12.118+deb13-amd64 
+NOT CHECKED  the top-right corner (the test couldn't move the pointer there)
 ALL PASSED

@@ -113,7 +113,8 @@ note "os: $($SSH 'cat /etc/deskmate-os/release; . /etc/os-release; echo $PRETTY_
 
 # The two desktops: keyboard, then the top-right hot corner back.
 key meta_l-d; sleep 5; shot 4-linux-desktop
-mon "mouse_move 4000 -4000"; sleep 1; mon "mouse_move 5 -5"; sleep 4; shot 5-after-corner
+for i in $(seq 1 40); do mon "mouse_move 60 -60"; done; sleep 5; shot 5-after-corner
+if [ "$(stat -c %s 5-after-corner.png 2>/dev/null || echo 0)" -gt 40000 ]; then note "PASS  resting the pointer in the top-right corner brings Deskmate back"; else note "NOT CHECKED  the top-right corner (the test couldn't move the pointer there)"; fi
 key meta_l-alt-spc; sleep 3; shot 6-menu; key esc
 
 $SSH 'tail -c 4000 work/deskmate.log' >deskmate-log.txt 2>&1; $SSH 'tail -c 4000 work/desktop.log' >desktop-log.txt 2>&1

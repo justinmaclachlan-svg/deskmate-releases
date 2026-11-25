@@ -1,0 +1,23 @@
+#!/bin/sh
+# Switches the screen between Deskmate (full screen) and the normal Linux
+# desktop. Usage: deskmate-desktop deskmate | linux | toggle | which
+state="${XDG_RUNTIME_DIR:-/tmp}/deskmate-desktop"
+now=$(cat "$state" 2>/dev/null || echo deskmate)
+running() { pgrep -u "$(id -u)" -fx /opt/deskmate/deskmate >/dev/null 2>&1; }
+case "${1:-toggle}" in
+  which) echo "$now"; exit 0 ;;
+  toggle) [ "$now" = linux ] && set -- deskmate || set -- linux ;;
+esac
+case "$1" in
+  linux)
+    wlrctl toplevel minimize app_id:deskmate 2>/dev/null
+    echo linux >"$state" ;;
+  deskmate|start)
+    if running; then
+      wlrctl toplevel focus app_id:deskmate 2>/dev/null
+    else
+      (cd "$HOME" && setsid /opt/deskmate/deskmate >>"$HOME/.local/state/deskmate.log" 2>&1 &)
+    fi
+    echo deskmate >"$state" ;;
+  *) echo "Usage: deskmate-desktop deskmate | linux | toggle | which" >&2; exit 2 ;;
+esac

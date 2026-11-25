@@ -1,0 +1,84 @@
+#!/bin/sh
+# The Deskmate OS menu (Super+Alt+Space): one place for style, setup, Bots,
+# security and power. Also: deskmate-menu hotkeys | theme | power | clipboard |
+# screenshot | screenshot-area
+pick() { fuzzel --dmenu --prompt "$1 " ; }
+term() { foot -T "$1" sh -c "$2; echo; echo 'Press Enter to close.'; read _"; }
+shot() {
+  mkdir -p "$HOME/Pictures"
+  f="$HOME/Pictures/screenshot-$(date +%Y%m%d-%H%M%S).png"
+  if [ "$1" = area ]; then grim -g "$(slurp)" "$f" || exit 0; else grim "$f"; fi
+  wl-copy <"$f"
+  command -v notify-send >/dev/null && notify-send "Screenshot saved" "$f"
+}
+case "$1" in
+  hotkeys) exec foot -T Hotkeys -W 84x30 less -R /usr/share/deskmate-os/hotkeys.txt ;;
+  theme) t=$(deskmate-theme list | pick "Theme"); [ -n "$t" ] && deskmate-theme "$t"; exit 0 ;;
+  power)
+    case "$(printf 'Lock\nLog out\nRestart\nShut down\n' | pick "Power")" in
+      Lock) swaylock -f -c 000000 ;;
+      "Log out") labwc --exit ;;
+      Restart) systemctl reboot ;;
+      "Shut down") systemctl poweroff ;;
+    esac; exit 0 ;;
+  clipboard) cliphist list | pick "Clipboard" | cliphist decode | wl-copy; exit 0 ;;
+  screenshot) shot full; exit 0 ;;
+  screenshot-area) shot area; exit 0 ;;
+esac
+choice=$(cat <<'LIST' | pick "Deskmate OS"
+Deskmate
+Linux desktop
+Apps
+Terminal
+Files
+Browser
+Style: theme
+Screenshot: area
+Screenshot: whole screen
+Web app: add a website as an app
+Bots: stop everything now
+Bots: turn their network off
+Bots: turn their network on
+Bots: share a folder with them
+Security: check everything now
+Agents: pair one (Grok Bot, Deskmate on the host)
+Setup: users
+Setup: sign in to Claude Code
+Setup: sign in to Codex
+Setup: sign in to Gemini
+System: update
+System: monitor
+System: status
+Hotkeys
+Power
+LIST
+)
+case "$choice" in
+  Deskmate) deskmate-desktop deskmate ;;
+  "Linux desktop") deskmate-desktop linux ;;
+  Apps) fuzzel ;;
+  Terminal) foot ;;
+  Files) pcmanfm-qt ;;
+  Browser) chromium ;;
+  "Style: theme") exec "$0" theme ;;
+  "Screenshot: area") shot area ;;
+  "Screenshot: whole screen") sleep 0.4; shot full ;;
+  "Web app:"*)
+    n=$(printf '' | pick "Name"); [ -n "$n" ] || exit 0
+    u=$(printf 'https://' | pick "Address"); [ -n "$u" ] && deskmate-webapp add "$n" "$u" ;;
+  "Bots: stop"*) deskmate-os stop-bots ;;
+  "Bots: turn their network off") term "Bot network" "sudo deskmate-os net off" ;;
+  "Bots: turn their network on") term "Bot network" "sudo deskmate-os net on" ;;
+  "Bots: share"*) d=$(printf '%s\n' "$HOME/Documents" "$HOME/Downloads" | pick "Folder"); [ -n "$d" ] && term "Share" "deskmate-os share '$d'" ;;
+  "Security:"*) term "Security" "/opt/deskmate/dm call security.sweep" ;;
+  "Agents:"*) term "Pair an agent" "/opt/deskmate/dm pair-code" ;;
+  "Setup: sign in to Claude Code") term "Sign in" "deskmate-os login claude" ;;
+  "Setup: sign in to Codex") term "Sign in" "deskmate-os login codex" ;;
+  "Setup: sign in to Gemini") term "Sign in" "deskmate-os login gemini" ;;
+  "Setup: users") term "Users" "sudo deskmate-os users" ;;
+  "System: update") term "Update" "sudo deskmate-os update" ;;
+  "System: monitor") foot -T Monitor btop ;;
+  "System: status") term "Status" "deskmate-os status" ;;
+  Hotkeys) exec "$0" hotkeys ;;
+  Power) exec "$0" power ;;
+esac

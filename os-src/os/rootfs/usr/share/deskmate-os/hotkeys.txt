@@ -1,0 +1,24 @@
+Deskmate OS hotkeys            (Super is the Windows key)
+
+  Top-right corner     Switch between Deskmate and the Linux desktop
+  Super + D            The same, from the keyboard
+  Super + Space        Launcher: find and start any app
+  Super + Alt + Space  Deskmate OS menu: style, setup, Bots, security, power
+  Super + K            This list
+  Super + Enter        Terminal (also Ctrl + Alt + T)
+  Super + B            Browser
+  Super + F            Files
+  Super + Q            Close the window
+  Super + Up           Make the window full size, or put it back
+  Super + Left/Right   Put the window on the left or right half
+  Alt + Tab            Next window
+  Super + L            Lock the screen
+  Print                Screenshot of an area (saved to Pictures and copied)
+  Shift + Print        Screenshot of the whole screen
+  Super + Ctrl + V     Clipboard history
+  Super + Ctrl + Shift + Space   Pick a theme
+  Super + Esc          Stop everything your Bots are running, right now
+
+In a terminal:
+  deskmate-os help     Users, sharing folders with Bots, Bot network, updates
+  sudo -i  or  su -    A root shell (admins use sudo; root has its own password)

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Starts the desktop after login. Root gets a terminal only: no desktop, no Bots.
+if [ "$(id -u)" = 0 ]; then
+  echo "Root is for the terminal only. Log in as yourself for Deskmate."
+  exec /bin/bash -l
+fi
+if [ "$(id -u)" -lt 1000 ] || ! id "$(id -un)-bots" >/dev/null 2>&1; then
+  echo "This account has no Bots' account, so it can't use Deskmate. An admin can add people with: sudo deskmate-os users"
+  exec /bin/bash -l
+fi
+. /etc/profile.d/deskmate-agent.sh
+export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=labwc:wlroots
+export QT_QPA_PLATFORM="wayland;xcb" MOZ_ENABLE_WAYLAND=1 GDK_BACKEND=wayland,x11
+export ELECTRON_OZONE_PLATFORM_HINT=auto
+# A VM has no graphics card: draw in software.
+if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
+  export WLR_RENDERER=pixman LIBGL_ALWAYS_SOFTWARE=1 WLR_NO_HARDWARE_CURSORS=1
+fi
+[ -f "$HOME/.config/deskmate-os/theme" ] || deskmate-theme deskmate --quiet
+mkdir -p "$HOME/.local/state"
+exec dbus-run-session labwc >"$HOME/.local/state/desktop.log" 2>&1

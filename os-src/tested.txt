@@ -1,0 +1,22 @@
+PASS  the host's Deskmate packs a clone
+PASS  the clone holds no secret values
+PASS  first start set up the computer and SSH answers for the Bots' account
+PASS  nothing started a desktop before anyone logged in
+PASS  Deskmate is running as the person
+PASS  the desktop is running (labwc, waybar)
+commands sent through Deskmate ran as: tester-bots 
+PASS  Deskmate runs Bot commands as the Bots' account, not the person, not root
+PASS  the security review reports its scanners and the sandbox
+PASS  the cloned Bot is in the VM's Deskmate
+PASS  the cloned skill is there and passed review
+PASS  the dangerous skill was blocked by the review
+PASS  no secret came over
+PASS  the AI coding tools are installed but not signed in
+PASS  the Bots' account is not root
+PASS  the Bots' account has no sudo
+PASS  the Bots' account can't read the person's home
+PASS  the Bots' account can't log in as root over SSH
+PASS  the sandbox runs, with no network and a read-only system
+scanners: """skillspector"""skill-scanner"""clamscan"""bandit"""gitleaks"""osv-scanner"""shellcheck"""debsecan
+os: 0.1 Debian GNU/Linux 13 (trixie) 6.12.118+deb13-amd64 
+ALL PASSED

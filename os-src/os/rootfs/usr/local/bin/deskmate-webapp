@@ -1,0 +1,17 @@
+#!/bin/sh
+# Turns a website into an app in the launcher, in its own window.
+# Usage: deskmate-webapp add "<name>" <url> | remove "<name>" | list
+apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+mkdir -p "$apps"
+slug() { printf '%s' "$1" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-'; }
+case "$1" in
+  add)
+    [ -n "$2" ] && [ -n "$3" ] || { echo 'Usage: deskmate-webapp add "<name>" <url>' >&2; exit 2; }
+    case "$3" in http://*|https://*) ;; *) echo "The address must start with https://" >&2; exit 2 ;; esac
+    f="$apps/webapp-$(slug "$2").desktop"
+    printf '[Desktop Entry]\nType=Application\nName=%s\nComment=Web app\nExec=chromium --app=%s --class=webapp-%s\nIcon=applications-internet\nCategories=Network;\n' "$2" "$3" "$(slug "$2")" >"$f"
+    echo "Added $2. Find it in the launcher (Super+Space)." ;;
+  remove) rm -f "$apps/webapp-$(slug "$2").desktop" && echo "Removed $2." ;;
+  list) ls "$apps" 2>/dev/null | sed -n 's/^webapp-\(.*\)\.desktop$/\1/p' ;;
+  *) echo 'Usage: deskmate-webapp add "<name>" <url> | remove "<name>" | list' >&2; exit 2 ;;
+esac

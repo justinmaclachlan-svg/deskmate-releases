@@ -1,0 +1,10 @@
+[Unit]
+Description=Deskmate OS diagnostics (only when the image is being tested)
+ConditionPathExists=/boot/efi/deskmate-debug
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c 'while true; do { systemctl --no-pager --failed; systemctl --no-pager status greetd 2>&1 | head -20; journalctl -b --no-pager -p info -n 150; } >/var/tmp/deskmate-debug.txt 2>&1; chmod 644 /var/tmp/deskmate-debug.txt; sleep 20; done'
+
+[Install]
+WantedBy=multi-user.target

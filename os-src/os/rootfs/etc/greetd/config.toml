@@ -1,0 +1,6 @@
+[terminal]
+vt = 1
+
+[default_session]
+command = "tuigreet --time --remember --asterisks --greeting 'Deskmate OS' --cmd deskmate-session"
+user = "_greetd"

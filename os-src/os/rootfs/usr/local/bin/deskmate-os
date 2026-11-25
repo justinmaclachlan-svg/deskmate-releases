@@ -1,0 +1,212 @@
+#!/bin/bash
+# Deskmate OS: users, their Bots' accounts, sharing, Bot network, updates.
+set -u
+say() { printf '%s\n' "$*"; }
+die() { printf '%s\n' "$*" >&2; exit 1; }
+need_root() { [ "$(id -u)" = 0 ] || die "This needs root. Run: sudo deskmate-os $*"; }
+valid_name() { [[ "$1" =~ ^[a-z][a-z0-9_-]{0,23}$ ]]; }
+people() { awk -F: '$3>=1000 && $3<60000 && $1 !~ /-bots$/ {print $1}' /etc/passwd; }
+
+help() {
+cat <<'HELP'
+deskmate-os: manage this computer.
+
+  deskmate-os status                 Who's here, Bot accounts, network, updates
+  sudo deskmate-os users             Add or remove people (a menu)
+  sudo deskmate-os user add <name> [--admin]
+  sudo deskmate-os user del <name>
+  deskmate-os share <folder>         Let your Bots read and change a folder of yours
+  deskmate-os unshare <folder>
+  deskmate-os stop-bots              Stop everything your Bots are running (Super+Esc)
+  sudo deskmate-os net off|on        Cut or restore the network for every Bot account
+  deskmate-os login <tool>           Sign in to an AI coding tool as your Bots' account:
+                                     claude, codex, gemini, grok. Sign-ins are never
+                                     copied from another computer.
+  deskmate-os install <tool>         Install or update a tool in your Bots' account
+                                     (never as root)
+  sudo deskmate-os update            Install system updates now (security updates
+                                     also install themselves every day)
+  sudo deskmate-os host-key "<key>"  Let Deskmate on the host PC use your Bots' account
+
+Every person has a login and a second, locked-down account for their Bots
+(<name>-bots): no password, no sudo, and no access to the person's home.
+Root has its own password and is for the terminal only.
+HELP
+}
+
+make_agent() { # the Bots' account for $1
+  local u="$1" a="$1-bots" h="/home/$1-bots"
+  getent group deskmate-bots >/dev/null || groupadd --system deskmate-bots
+  if ! id "$a" >/dev/null 2>&1; then
+    useradd -m -d "$h" -s /bin/bash -c "Bots of $u" -G deskmate-bots "$a"
+    passwd -l "$a" >/dev/null
+  fi
+  usermod -aG "$a" "$u"
+  chmod 750 "$h"
+  # Shared between the person and their Bots: the workspace and Deskmate's Bot folders.
+  for d in work deskmate; do
+    mkdir -p "$h/$d"
+    chown "$a:$a" "$h/$d"
+    chmod 2770 "$h/$d"
+    setfacl -R -m "g:$a:rwX" -m "d:g:$a:rwX" -m "d:u::rwX" -m "d:o::---" "$h/$d"
+  done
+  mkdir -p "$h/.ssh" "$h/.npm-global" "$h/.local/bin"
+  touch "$h/.ssh/authorized_keys"
+  chown -R "$a:$a" "$h/.ssh" "$h/.npm-global" "$h/.local"
+  chmod 700 "$h/.ssh"; chmod 600 "$h/.ssh/authorized_keys"
+  ln -sfn "$h/work" "/home/$u/Bots"; chown -h "$u:$u" "/home/$u/Bots"
+  # The person may run commands as their own Bots' account, and only that.
+  printf '%s ALL=(%s) NOPASSWD:SETENV: ALL\nDefaults>%s !use_pty\n' "$u" "$a" "$a" >"/etc/sudoers.d/deskmate-$u"
+  chmod 440 "/etc/sudoers.d/deskmate-$u"
+  visudo -cq -f "/etc/sudoers.d/deskmate-$u" || { rm -f "/etc/sudoers.d/deskmate-$u"; die "Couldn't write the sudo rule for $u."; }
+}
+
+user_add() {
+  need_root "user add"
+  local u="${1:-}" admin="${2:-}"
+  valid_name "$u" || die "Names: lowercase letters, digits, - and _, starting with a letter (24 at most)."
+  [[ "$u" == *-bots ]] && die "Names ending in -bots are for Bot accounts."
+  id "$u" >/dev/null 2>&1 && die "$u already exists."
+  useradd -m -s /bin/bash "$u" || die "Couldn't add $u."
+  chmod 700 "/home/$u"
+  if [ -n "${DESKMATE_PASSWORD:-}" ]; then
+    printf '%s:%s\n' "$u" "$DESKMATE_PASSWORD" | chpasswd
+  else
+    passwd "$u" || { userdel -r "$u" 2>/dev/null; die "No password set; $u was not added."; }
+  fi
+  [ "$admin" = --admin ] && usermod -aG sudo "$u"
+  make_agent "$u"
+  say "Added $u$([ "$admin" = --admin ] && echo ' (admin: can use sudo)'). Their Bots run as $u-bots."
+}
+
+user_del() {
+  need_root "user del"
+  local u="${1:-}"
+  id "$u" >/dev/null 2>&1 || die "No user named $u."
+  [ "$u" = "${SUDO_USER:-}" ] && die "You can't remove yourself."
+  pkill -KILL -u "$u-bots" 2>/dev/null; pkill -KILL -u "$u" 2>/dev/null
+  rm -f "/etc/sudoers.d/deskmate-$u"
+  userdel -r "$u-bots" 2>/dev/null
+  userdel -r "$u" 2>/dev/null
+  groupdel "$u-bots" 2>/dev/null
+  say "Removed $u and their Bots' account, with their files."
+}
+
+users_menu() {
+  need_root users
+  while true; do
+    local list; list=$(for u in $(people); do printf '%s %s\n' "$u" "$(id -nG "$u" | grep -qw sudo && echo admin || echo standard)"; done)
+    local c; c=$(whiptail --title "Users" --menu "People on this computer:\n\n$list\n" 20 64 4 add "Add a standard user" admin "Add an admin (can use sudo)" remove "Remove someone" done "Close" 3>&1 1>&2 2>&3) || break
+    case "$c" in
+      add|admin)
+        local n; n=$(whiptail --inputbox "Login name (lowercase):" 9 50 3>&1 1>&2 2>&3) || continue
+        if [ "$c" = admin ]; then user_add "$n" --admin; else user_add "$n"; fi; read -rp "Enter to continue " _ ;;
+      remove)
+        local n; n=$(whiptail --inputbox "Remove which user? Their files are deleted." 9 60 3>&1 1>&2 2>&3) || continue
+        whiptail --yesno "Remove $n, their Bots' account, and all their files?" 9 60 && user_del "$n"; read -rp "Enter to continue " _ ;;
+      *) break ;;
+    esac
+  done
+}
+
+share() { # $1 = folder, $2 = on|off
+  local d; d=$(realpath -e "${1:-}" 2>/dev/null) || die "That folder isn't there."
+  local a="$(id -un)-bots"
+  id "$a" >/dev/null 2>&1 || die "You have no Bots' account."
+  [ -O "$d" ] || die "You can only share folders you own."
+  if [ "${2:-on}" = on ]; then
+    setfacl -R -m "u:$a:rwX" "$d" || die "Couldn't share $d."
+    find "$d" -type d -exec setfacl -m "d:u:$a:rwX" {} +
+    # Bots need to pass through the folders above it (not list or read them).
+    local p; p=$(dirname "$d")
+    while [ "$p" != / ] && [ -O "$p" ]; do setfacl -m "u:$a:--x" "$p"; p=$(dirname "$p"); done
+    say "Your Bots can now read and change $d."
+  else
+    setfacl -R -x "u:$a" -x "d:u:$a" "$d" 2>/dev/null
+    say "Your Bots can no longer reach $d."
+  fi
+}
+
+net() {
+  need_root net
+  nft list table inet deskmate_bots >/dev/null 2>&1 && nft delete table inet deskmate_bots
+  if [ "${1:-}" = off ]; then
+    nft add table inet deskmate_bots
+    nft add chain inet deskmate_bots out '{ type filter hook output priority 0; }'
+    for a in $(awk -F: '$1 ~ /-bots$/ {print $3}' /etc/passwd); do
+      nft add rule inet deskmate_bots out meta skuid "$a" oifname != "lo" reject
+    done
+    say "The network is off for every Bots' account (until 'net on' or a restart)."
+  else
+    say "The network is on for Bots' accounts."
+  fi
+}
+
+install_tool() {
+  [ "$(id -u)" = 0 ] && die "AI tools aren't installed or run as root. Run this as yourself."
+  local a="$(id -un)-bots" pkg
+  case "${1:-}" in
+    claude) pkg=@anthropic-ai/claude-code ;;
+    codex) pkg=@openai/codex ;;
+    gemini) pkg=@google/gemini-cli ;;
+    grok)
+      say "Installing Grok Build with xAI's installer in $a's account (not as root, not as you)."
+      sudo -n -H -u "$a" -- env "PATH=/home/$a/.local/bin:/usr/local/bin:/usr/bin:/bin" bash -c 'curl -fsSL https://x.ai/cli/install.sh | bash'
+      return ;;
+    *) die "Install which tool? claude, codex, gemini or grok." ;;
+  esac
+  say "Installing $pkg in $a's account (not as root, not as you)."
+  sudo -n -H -u "$a" -- env "NPM_CONFIG_PREFIX=/home/$a/.npm-global" "PATH=/home/$a/.npm-global/bin:/usr/local/bin:/usr/bin:/bin" npm install -g "$pkg" \
+    && say "Done. Deskmate reviews new tools on its next security check; sign in from a Bot's chat or Settings → Models."
+}
+
+login_tool() {
+  [ "$(id -u)" = 0 ] && die "AI tools aren't signed in or run as root. Run this as yourself."
+  local a="$(id -un)-bots" cmd
+  case "${1:-}" in
+    claude) cmd="claude" ;;
+    codex) cmd="codex login" ;;
+    gemini) cmd="gemini" ;;
+    grok) cmd="grok" ;;
+    *) die "Sign in to which tool? claude, codex, gemini or grok." ;;
+  esac
+  local p="/home/$a/.local/bin:/home/$a/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
+  sudo -n -H -u "$a" -- env "PATH=$p" sh -c "command -v ${cmd%% *} >/dev/null" || die "${cmd%% *} isn't installed. Run: deskmate-os install $1"
+  say "Signing in to $1 as $a. Follow its prompts; open any link it shows in the browser here. Leave the tool (Ctrl+C twice or /exit) when it says you're signed in."
+  ( cd /tmp && sudo -H -u "$a" -- env "PATH=$p" "TERM=${TERM:-xterm}" "BROWSER=echo" $cmd )
+}
+
+status() {
+  say "Deskmate OS $(cat /etc/deskmate-os/release 2>/dev/null) on $(. /etc/os-release; echo "$PRETTY_NAME")"
+  say "People:"
+  for u in $(people); do
+    say "  $u ($(id -nG "$u" | grep -qw sudo && echo admin || echo standard)); Bots run as $u-bots, $(pgrep -u "$u-bots" 2>/dev/null | wc -l) process(es) now"
+  done
+  nft list table inet deskmate_bots >/dev/null 2>&1 && say "Bot network: OFF" || say "Bot network: on"
+  say "Root login: terminal only (su - or sudo -i)"
+  local n; n=$(apt list --upgradable 2>/dev/null | grep -c / || true)
+  say "Updates waiting: $n"
+}
+
+case "${1:-help}" in
+  help|-h|--help) help ;;
+  status) status ;;
+  users) users_menu ;;
+  user) case "${2:-}" in add) user_add "${3:-}" "${4:-}" ;; del|remove) user_del "${3:-}" ;; *) help ;; esac ;;
+  share) share "${2:-}" on ;;
+  unshare) share "${2:-}" off ;;
+  stop-bots)
+    a="$(id -un)-bots"
+    sudo -n -u "$a" -- /usr/bin/pkill -KILL -u "$a" 2>/dev/null
+    command -v notify-send >/dev/null && notify-send "Deskmate" "Stopped everything in $a."
+    say "Stopped everything running as $a." ;;
+  net) net "${2:-}" ;;
+  install) install_tool "${2:-}" ;;
+  login) login_tool "${2:-}" ;;
+  update) need_root update; apt-get update && apt-get -y full-upgrade && apt-get -y autoremove; command -v freshclam >/dev/null && freshclam --quiet 2>/dev/null; say "Up to date." ;;
+  host-key)
+    need_root host-key
+    u="${SUDO_USER:-$(people | head -1)}"; f="/home/$u-bots/.ssh/authorized_keys"
+    case "${2:-}" in ssh-ed25519\ *|ssh-rsa\ *|ecdsa-*) grep -qxF "$2" "$f" 2>/dev/null || printf '%s\n' "$2" >>"$f"; say "Deskmate on the host can now use $u-bots over SSH." ;; *) die 'Give the public key in quotes, starting with ssh-ed25519.' ;; esac ;;
+  *) help; exit 2 ;;
+esac

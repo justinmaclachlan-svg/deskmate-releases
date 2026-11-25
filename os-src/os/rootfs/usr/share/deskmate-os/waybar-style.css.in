@@ -1,0 +1,9 @@
+* { font-family: "Noto Sans", sans-serif; font-size: 13px; min-height: 0; }
+window#waybar { background: #@BG2@; color: #@FG@; border-top: 1px solid #@LINE@; }
+#custom-menu, #custom-files, #custom-browser, #custom-terminal, #custom-power, #cpu, #memory, #clock { padding: 0 10px; color: #@DIM@; }
+#custom-menu { color: #@FG@; font-weight: 600; }
+#custom-menu:hover, #custom-files:hover, #custom-browser:hover, #custom-terminal:hover, #custom-power:hover { color: #@FG@; }
+#clock { color: #@FG@; }
+#taskbar button { padding: 0 10px; margin: 5px 2px; border-radius: 8px; color: #@DIM@; }
+#taskbar button.active { background: #@LINE@; color: #@FG@; }
+#custom-deskmate { padding: 0 14px; margin: 5px 6px 5px 4px; border-radius: 8px; background: #@ACCENT@; color: #ffffff; font-weight: 600; }

@@ -1,0 +1,18 @@
+[Unit]
+Description=Deskmate OS first-start setup
+ConditionPathExists=!/var/lib/deskmate-os/setup-done
+After=systemd-user-sessions.service local-fs.target systemd-udev-settle.service
+Before=greetd.service getty@tty1.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/deskmate-firstboot
+StandardInput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

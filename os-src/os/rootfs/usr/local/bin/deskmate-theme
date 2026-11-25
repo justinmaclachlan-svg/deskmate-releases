@@ -1,0 +1,108 @@
+#!/bin/sh
+# One theme for everything: terminal, taskbar, launcher, windows, wallpaper,
+# notifications and Deskmate. Usage: deskmate-theme [name] | list
+dir=/usr/share/deskmate-os/themes
+[ "$1" = list ] && { ls "$dir"; exit 0; }
+name="${1:-deskmate}"
+[ -f "$dir/$name" ] || { echo "No theme named $name. Try: $(ls "$dir" | tr '\n' ' ')" >&2; exit 1; }
+. "$dir/$name"
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}"
+mkdir -p "$cfg/deskmate-os" "$cfg/foot" "$cfg/waybar" "$cfg/fuzzel" "$cfg/labwc" "$cfg/mako"
+cp "$dir/$name" "$cfg/deskmate-os/theme"
+
+cat >"$cfg/foot/foot.ini" <<FOOT
+[main]
+font=monospace:size=11
+pad=10x10
+[colors]
+background=$BG
+foreground=$FG
+regular0=$BG2
+regular1=$RED
+regular2=$GREEN
+regular3=$YELLOW
+regular4=$BLUE
+regular5=$ACCENT
+regular6=$BLUE
+regular7=$FG
+bright0=$DIM
+bright1=$RED
+bright2=$GREEN
+bright3=$YELLOW
+bright4=$BLUE
+bright5=$ACCENT
+bright6=$BLUE
+bright7=$FG
+selection-foreground=$BG
+selection-background=$ACCENT
+FOOT
+
+sed -e "s/@BG@/$BG/g; s/@BG2@/$BG2/g; s/@LINE@/$LINE/g; s/@FG@/$FG/g; s/@DIM@/$DIM/g; s/@ACCENT@/$ACCENT/g" \
+  /usr/share/deskmate-os/waybar-style.css.in >"$cfg/waybar/style.css"
+[ -f "$cfg/waybar/config" ] || cp /etc/xdg/waybar/config "$cfg/waybar/config"
+
+cat >"$cfg/fuzzel/fuzzel.ini" <<FUZZEL
+[main]
+font=Noto Sans:size=12
+prompt="> "
+width=44
+lines=12
+horizontal-pad=18
+vertical-pad=14
+inner-pad=8
+[colors]
+background=${BG2}f2
+text=${FG}ff
+match=${ACCENT}ff
+selection=${LINE}ff
+selection-text=${FG}ff
+selection-match=${ACCENT}ff
+border=${ACCENT}ff
+[border]
+width=2
+radius=12
+FUZZEL
+
+cat >"$cfg/labwc/themerc-override" <<LABWC
+window.active.title.bg.color: #$BG2
+window.inactive.title.bg.color: #$BG
+window.active.label.text.color: #$FG
+window.inactive.label.text.color: #$DIM
+window.active.border.color: #$ACCENT
+window.inactive.border.color: #$LINE
+window.active.button.unpressed.image.color: #$FG
+window.inactive.button.unpressed.image.color: #$DIM
+menu.items.bg.color: #$BG2
+menu.items.text.color: #$FG
+menu.items.active.bg.color: #$ACCENT
+menu.items.active.text.color: #ffffff
+osd.bg.color: #$BG2
+osd.border.color: #$ACCENT
+osd.label.text.color: #$FG
+border.width: 1
+LABWC
+
+cat >"$cfg/mako/config" <<MAKO
+font=Noto Sans 11
+background-color=#$BG2
+text-color=#$FG
+border-color=#$ACCENT
+border-radius=10
+border-size=1
+padding=12
+default-timeout=7000
+anchor=top-right
+margin=16
+MAKO
+
+[ "$2" = --quiet ] && exit 0
+# Apply now, where a desktop is running.
+if [ -n "$WAYLAND_DISPLAY" ]; then
+  labwc --reconfigure 2>/dev/null
+  pkill -u "$(id -u)" -USR2 -x waybar 2>/dev/null
+  pkill -u "$(id -u)" -x swaybg 2>/dev/null; (swaybg -c "#$BG" >/dev/null 2>&1 &)
+  command -v makoctl >/dev/null && makoctl reload 2>/dev/null
+  dark=true; [ "$MODE" = light ] && dark=false
+  /opt/deskmate/dm call settings.update "{\"darkMode\":$dark}" >/dev/null 2>&1
+fi
+echo "Theme: $name"

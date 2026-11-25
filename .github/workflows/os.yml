@@ -46,8 +46,12 @@ jobs:
           cp ../results/results.txt tested.txt
           cp ../results/*.png . 2>/dev/null || true
           ls -lh
-          gh release delete os --yes --cleanup-tag -R "$GITHUB_REPOSITORY" 2>/dev/null || true
-          sleep 5
-          gh release create os --target "$GITHUB_SHA" -R "$GITHUB_REPOSITORY" --title "Deskmate OS" \
-            --notes "Debian 13 with Deskmate as the desktop, for a Hyper-V VM. Get it with New-DeskmateVM.ps1 (see the repository's front page). Boot-tested before publishing: see tested.txt." \
-            DeskmateOS.tar.xz.part* parts.txt DeskmateOS.tar.xz.sha256 tested.txt *.png
+          # Replace the files on the existing release (it's never deleted first, so a
+          # failed upload can't leave people without a download).
+          if gh release view os -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload os -R "$GITHUB_REPOSITORY" --clobber DeskmateOS.tar.xz.part* parts.txt DeskmateOS.tar.xz.sha256 tested.txt *.png
+          else
+            gh release create os --target "$GITHUB_SHA" -R "$GITHUB_REPOSITORY" --title "Deskmate OS" \
+              --notes "Debian 13 with Deskmate as the desktop, for a Hyper-V VM. Get it with New-DeskmateVM.ps1 (see the repository's front page). Boot-tested before publishing: see tested.txt." \
+              DeskmateOS.tar.xz.part* parts.txt DeskmateOS.tar.xz.sha256 tested.txt *.png
+          fi

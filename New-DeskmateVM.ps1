@@ -115,6 +115,12 @@ if (Test-Path $keyFile) { $hostKey = (Get-Content $keyFile -Raw).Trim() }
 # skills, plugins, teams, routines and policy rules. Never sign-ins, saved
 # secrets, browser logins or chat history: the VM signs in for itself.
 $cloneFile = ""
+# dm.exe comes with Deskmate for Windows; it may not be on the PATH.
+if (-not (Get-Command dm -ErrorAction SilentlyContinue)) {
+    foreach ($d in @("$env:ProgramFiles\Deskmate", "$env:LOCALAPPDATA\Programs\Deskmate", "$env:LOCALAPPDATA\Deskmate")) {
+        if (Test-Path (Join-Path $d "dm.exe")) { $env:PATH = "$d;$env:PATH"; break }
+    }
+}
 $dmCmd = Get-Command dm -ErrorAction SilentlyContinue
 if ($dmCmd -and -not $NoClone) {
     $try = Join-Path $Folder "deskmate-clone.bin"

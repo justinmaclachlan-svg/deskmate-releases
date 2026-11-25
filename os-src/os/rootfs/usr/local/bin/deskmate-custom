@@ -36,6 +36,11 @@ tval() { # tval FILE KEY DEFAULT: six hex digits, read as data
   printf '%s' "${v:-$3}"
 }
 may_write() { [ -n "${FORCE:-}" ] || [ ! -e "$1" ] || head -3 "$1" | grep -q "Managed by Deskmate OS"; }
+# App windows follow the theme's dark or light mode.
+mode_env() {
+  local t m; t=$(theme_file "$(get THEME)"); m=$(sed -n 's/^MODE=\(dark\|light\)[[:space:]]*$/\1/p' "${t:-$SYS/themes/deskmate}" | tail -1)
+  if [ "$m" = light ]; then echo "GTK_THEME=Adwaita QT_STYLE_OVERRIDE=Adwaita"; else echo "GTK_THEME=Adwaita:dark QT_STYLE_OVERRIDE=Adwaita-Dark"; fi
+}
 app_for() {
   local v; v=$(get "APP_$1")
   case "$1" in
@@ -177,6 +182,12 @@ anchor=top-right
 margin=16
 MAKO
 
+  if may_write "$CFG/labwc/environment"; then
+    { echo "# $MARK"; mode_env | tr ' ' '\n'; } >"$CFG/labwc/environment"
+  fi
+  if command -v gsettings >/dev/null; then
+    gsettings set org.gnome.desktop.interface color-scheme "$([ "$MODE" = light ] && echo prefer-light || echo prefer-dark)" 2>/dev/null || true
+  fi
   if live; then
     labwc --reconfigure 2>/dev/null
     if [ "$(get BAR_HIDDEN)" = 1 ]; then pkill -u "$(id -u)" -x waybar 2>/dev/null
@@ -215,7 +226,7 @@ case "$cmd" in
   session) # called once when the desktop starts
     display_apply; apply; toggles_apply; hook login ;;
   get) get "${1:-}" ;;
-  open) k="${1:-}"; p=$(app_for "$k"); [ -n "$p" ] || die "Open what? browser, terminal, files or editor."; shift; exec $p "$@" ;;
+  open) k="${1:-}"; p=$(app_for "$k"); [ -n "$p" ] || die "Open what? browser, terminal, files or editor."; shift; exec env $(mode_env) $p "$@" ;;
 
   theme)
     case "${1:-list}" in
@@ -401,7 +412,7 @@ case "$cmd" in
       keys) rm -f "$MY/keys" ;;
       bar) put BAR ""; put BAR_HIDDEN "" ;;
       all) rm -f "$MY/settings" "$MY/keys"
-        for f in foot/foot.ini waybar/style.css waybar/config fuzzel/fuzzel.ini labwc/themerc-override labwc/rc.xml mako/config; do
+        for f in foot/foot.ini waybar/style.css waybar/config fuzzel/fuzzel.ini labwc/themerc-override labwc/rc.xml labwc/environment mako/config; do
           [ -e "$CFG/$f" ] && ! head -3 "$CFG/$f" | grep -q "Managed by Deskmate OS" && cp "$CFG/$f" "$CFG/$f.bak"
         done; FORCE=1 ;;
       *) die "refresh theme | fonts | keys | bar | all   (all also replaces files you edited by hand, keeping a .bak copy)" ;;

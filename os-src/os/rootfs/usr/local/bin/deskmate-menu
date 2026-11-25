@@ -12,6 +12,28 @@ shot() {
   command -v notify-send >/dev/null && notify-send "Screenshot saved" "$f"
 }
 case "$1" in
+  ask) # Ask a Bot from anywhere; the answer comes back as a notification.
+    q=$(printf '' | pick "Ask a Bot"); [ -n "$q" ] || exit 0
+    if [ "$2" = clipboard ]; then
+      clip=$(wl-paste --no-newline 2>/dev/null | head -c 6000)
+      [ -n "$clip" ] && q="$q
+
+$clip"
+    fi
+    bots=$(/opt/deskmate/dm call bots.list 2>/dev/null | jq -r '.[] | select(.parentId == null) | .name')
+    if [ "$(printf '%s\n' "$bots" | grep -c .)" -gt 1 ]; then b=$(printf '%s\n' "$bots" | pick "Which Bot"); else b="$bots"; fi
+    [ -n "$b" ] || { notify-send -a Deskmate "Couldn't ask" "Deskmate isn't running."; exit 0; }
+    notify-send -a Deskmate "Asked $b" "The answer will show up here and in Deskmate."
+    if a=$(/opt/deskmate/dm send "$b" "$q" 2>&1); then
+      notify-send -a Deskmate -t 20000 "$b" "$(printf '%s' "$a" | tail -c 500)"
+    else
+      notify-send -a Deskmate "$b couldn't answer" "$(printf '%s' "$a" | tail -c 300)"
+    fi
+    exit 0 ;;
+  inbox) # What needs you and what finished, in the launcher.
+    pickd=$(/opt/deskmate/dm call inbox.list 2>/dev/null | jq -r '.items[] | "\(.bot.name // "Bot"): \(if .kind == "approval" then "needs your OK: " + .title elif .kind == "stuck" then .title else (.kind + ": " + (.text | .[0:90])) end)"' | pick "Inbox")
+    [ -n "$pickd" ] && deskmate-desktop deskmate
+    exit 0 ;;
   hotkeys) exec foot -T Hotkeys -W 84x30 less -R /usr/share/deskmate-os/hotkeys.txt ;;
   theme) t=$(deskmate-custom theme list | pick "Theme"); [ -n "$t" ] && deskmate-custom theme set "${t%% *}"; exit 0 ;;
   power)
@@ -26,6 +48,9 @@ case "$1" in
   screenshot-area) shot area; exit 0 ;;
 esac
 choice=$(cat <<'LIST' | pick "Deskmate OS"
+Ask a Bot
+Ask a Bot about what's on the clipboard
+Inbox: what needs you and what finished
 Deskmate
 Linux desktop
 Apps
@@ -63,6 +88,9 @@ Power
 LIST
 )
 case "$choice" in
+  "Ask a Bot") exec "$0" ask ;;
+  "Ask a Bot about"*) exec "$0" ask clipboard ;;
+  "Inbox:"*) exec "$0" inbox ;;
   Deskmate) deskmate-desktop deskmate ;;
   "Linux desktop") deskmate-desktop linux ;;
   Apps) fuzzel ;;

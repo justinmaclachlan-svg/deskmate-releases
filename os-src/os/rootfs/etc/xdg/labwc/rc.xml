@@ -4,6 +4,7 @@
     <decoration>server</decoration>
     <gap>0</gap>
   </core>
+  <desktops number="4" popupTime="700" />
   <theme>
     <cornerRadius>8</cornerRadius>
     <font name="Noto Sans" size="10" />
@@ -13,6 +14,17 @@
     <keybind key="W-space"><action name="Execute" command="fuzzel" /></keybind>
     <keybind key="W-A-space"><action name="Execute" command="deskmate-menu" /></keybind>
     <keybind key="W-k"><action name="Execute" command="deskmate-menu hotkeys" /></keybind>
+    <keybind key="W-a"><action name="Execute" command="deskmate-menu ask" /></keybind>
+    <keybind key="W-S-a"><action name="Execute" command="deskmate-menu ask clipboard" /></keybind>
+    <keybind key="W-i"><action name="Execute" command="deskmate-menu inbox" /></keybind>
+    <keybind key="W-1"><action name="GoToDesktop" to="1" /></keybind>
+    <keybind key="W-2"><action name="GoToDesktop" to="2" /></keybind>
+    <keybind key="W-3"><action name="GoToDesktop" to="3" /></keybind>
+    <keybind key="W-4"><action name="GoToDesktop" to="4" /></keybind>
+    <keybind key="W-S-1"><action name="SendToDesktop" to="1" /></keybind>
+    <keybind key="W-S-2"><action name="SendToDesktop" to="2" /></keybind>
+    <keybind key="W-S-3"><action name="SendToDesktop" to="3" /></keybind>
+    <keybind key="W-S-4"><action name="SendToDesktop" to="4" /></keybind>
     <keybind key="W-d"><action name="Execute" command="deskmate-desktop toggle" /></keybind>
     <keybind key="W-Return"><action name="Execute" command="deskmate-custom open terminal" /></keybind>
     <keybind key="C-A-t"><action name="Execute" command="deskmate-custom open terminal" /></keybind>
@@ -38,6 +50,8 @@
       <action name="ToggleAlwaysOnTop" />
       <action name="ToggleOmnipresent" />
     </windowRule>
-    <windowRule identifier="deskmate" serverDecoration="no" />
+    <windowRule identifier="deskmate" serverDecoration="no">
+      <action name="ToggleOmnipresent" />
+    </windowRule>
   </windowRules>
 </labwc_config>

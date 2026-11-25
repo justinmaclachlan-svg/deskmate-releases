@@ -2,6 +2,11 @@ Deskmate OS hotkeys            (Super is the Windows key)
 
   Top-right corner     Switch between Deskmate and the Linux desktop
   Super + D            The same, from the keyboard
+  Super + A            Ask a Bot from anywhere (the answer comes as a notification)
+  Super + Shift + A    Ask a Bot about what's on the clipboard
+  Super + I            Inbox: what needs you and what finished
+  Ctrl + K             In Deskmate: go to any Bot, page or action
+  Super + 1 to 4       Switch workspace (with Shift: move the window there)
   Super + Space        Launcher: find and start any app
   Super + Alt + Space  Deskmate OS menu: style, setup, Bots, security, power
   Super + K            This list

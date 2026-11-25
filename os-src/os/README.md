@@ -40,6 +40,15 @@ can use it. `-NoClone` starts with a fresh Deskmate. Later copies:
   back. The Linux desktop has a taskbar, a launcher, files, a browser, a terminal.
 - **Super+Alt+Space**: the Deskmate OS menu. **Super+K**: every hotkey.
 
+## Getting things done faster
+
+- **Super+A** asks a Bot from anywhere; the answer comes back as a notification. **Super+Shift+A** sends what's on the clipboard along with your question.
+- **Super+I** shows the Inbox: what needs you and what finished.
+- **Ctrl+K** in Deskmate goes to any Bot, page or action.
+- **Super+1 to 4** are four workspaces (with Shift, move the window there). Deskmate is on all of them.
+- When the Linux desktop is showing, a notification appears when a Bot finishes or needs your OK.
+- App windows follow the theme's dark or light mode.
+
 ## Make it yours
 
 Everything is per person, and you can do it yourself or ask a Bot ("use the

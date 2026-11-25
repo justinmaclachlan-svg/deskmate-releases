@@ -4,7 +4,9 @@
 # Bots run as the locked-down account and not root, the sandbox works.
 # Usage: sudo os/test.sh <deskmate-os.raw> <results folder> [folder with dm]
 set -uo pipefail
-RAW=$(realpath "$1"); RES=$(realpath -m "$2"); BIN=$(realpath "${3:-.}"); mkdir -p "$RES"; cd "$RES"
+RAW=$(realpath "$1"); RES=$(realpath -m "$2"); BIN=$(realpath "${3:-.}"); HERE=$(cd "$(dirname "$0")" && pwd); mkdir -p "$RES"; cd "$RES"
+# A scripted model on this machine; the VM reaches it at 10.0.2.2.
+python3 "$HERE/mock-model.py" 11434 "$RES/mock-model.log" & MOCK_PID=$!
 FAIL=0; note() { echo "$*" | tee -a "$RES/results.txt"; }
 check() { if eval "$2" >/dev/null 2>&1; then note "PASS  $1"; else note "FAIL  $1"; FAIL=1; fi; }
 
@@ -28,7 +30,10 @@ fi
 
 cp --sparse=always "$RAW" test.raw
 ssh-keygen -q -t ed25519 -N '' -f key
-LOOP=$(losetup -Pf --show test.raw); mkdir -p esp; mount "${LOOP}p1" esp
+LOOP=$(losetup -Pf --show test.raw); mkdir -p esp
+# The partition's device can take a moment to appear.
+udevadm settle 2>/dev/null; for i in $(seq 1 40); do [ -b "${LOOP}p1" ] && break; sleep 0.5; done
+mount "${LOOP}p1" esp || { note "FAIL  couldn't open the image's boot partition to leave the setup answers"; losetup -d "$LOOP"; kill $MOCK_PID 2>/dev/null; exit 1; }
 printf 'HOSTNAME=dm-test\nADMIN_USER=tester\nADMIN_PASSWORD=testpass1\nROOT_PASSWORD=rootpass1\nHOST_SSH_KEY=%s\n' "$(cat key.pub)" >esp/deskmate-setup.conf
 [ -n "$CLONE" ] && cp "$CLONE" esp/deskmate-clone.bin
 touch esp/deskmate-debug
@@ -92,6 +97,11 @@ type_text "deskmate-os bar top >> Bots/custom.txt 2>&1"; key ret; sleep 3
 type_text "deskmate-os look >> Bots/custom.txt 2>&1"; key ret; sleep 2
 type_text "deskmate-os pkg install cowsay > Bots/pkg.txt 2>&1"; key ret; sleep 75
 type_text "dpkg -s cowsay >> Bots/pkg.txt 2>&1"; key ret; sleep 2
+type_text "dm send Scout hello > Bots/send.txt 2>&1"; key ret; sleep 40
+$SSH 'cat > work/e2e.sh' <"$HERE/e2e.sh"
+type_text "sh Bots/e2e.sh"; key ret
+for i in $(seq 1 40); do $SSH 'grep -q "== end" work/e2e.txt' 2>/dev/null && break; sleep 5; done
+type_text "deskmate-os keys list > Bots/keys.txt 2>&1"; key ret; sleep 2
 type_text "cp .local/state/deskmate.log .local/state/desktop.log Bots/"; key ret; sleep 2
 shot 3-terminal
 type_text "exit"; key ret; sleep 2
@@ -107,12 +117,25 @@ if [ -n "$CLONE" ]; then
   check "the dangerous skill was blocked by the review" "python3 -c \"import json,sys; s={x['name']:x['review'] for x in json.load(open('cloned-skills.json'))}; sys.exit(0 if s.get('bad-skill')=='blocked' else 1)\""
   check "no secret came over" "! $SSH 'grep -rqs topsecretvalue123 /home/tester-bots'"
 fi
+$SSH cat work/inbox.txt >inbox.json 2>/dev/null; $SSH cat work/keys.txt >keys.txt 2>/dev/null
 $SSH cat work/custom.txt >customize.txt 2>/dev/null; $SSH cat work/pkg.txt >pkg.txt 2>/dev/null
 check "a person can change the theme, a key and the bar" "grep -q 'Theme: nord' customize.txt && grep -q 'W-g  ->  featherpad' customize.txt && grep -q 'Bar: top' customize.txt"
 check "an admin can install system software with one command" "grep -q 'Status: install ok installed' pkg.txt"
 check "the Bots' account can't install system software itself" "! $SSH sudo -n /usr/local/sbin/deskmate-pkg install sl"
 check "the Bots can't read the person's settings or keys" "! $SSH ls /home/tester/.config"
 check "the customizing skill is installed for Bots and passed its own review" "python3 -c \"import json,sys; s={x['name']:x['review'] for x in json.load(open('cloned-skills.json'))}; sys.exit(0 if s.get('deskmate-os') in ('pass','caution') else 1)\""
+$SSH cat work/send.txt >bot-reply.txt 2>/dev/null
+note "a message to a Bot with no model signed in came back as: $(head -c 200 bot-reply.txt | tr '\n' ' ')"
+$SSH cat work/e2e.txt >bot-work.txt 2>/dev/null; $SSH cat work/cards.jsonl >approval-cards.jsonl 2>/dev/null
+check "asked to change the theme, a Bot did it (after its approval card was answered)" "grep -q '^theme: gruvbox' bot-work.txt"
+check "a Bot's shell command ran as the Bots' account" "grep -q '^shell ran as: tester-bots' bot-work.txt"
+check "a Bot wrote the file it was asked to" "grep -q '^notes: Line one|Line two' bot-work.txt"
+check "the approval card for that file showed the lines it would add" "grep '\"tool\":\"write_file\"' approval-cards.jsonl | grep -q 'Changes to .*+ Line one'"
+check "Plan first reached the model, and it answered with a plan" "grep -q 'PLAN_NOTE seen' mock-model.log"
+check "a plan waiting for a go-ahead is listed as needing you" "python3 -c \"import json,sys; d=json.load(open('inbox.json')); sys.exit(0 if d['needsYou']>=1 else 1)\""
+check "approval cards say in plain words what will happen" "grep -q '\"summary\":\"theme set gruvbox\"' approval-cards.jsonl"
+check "a Bot's reply while you're elsewhere lands in the Inbox" "python3 -c \"import json,sys; d=json.load(open('inbox.json')); sys.exit(0 if any(i['bot']['name']=='Scout' for i in d['items']) else 1)\""
+check "workspaces and quick-ask keys are set" "$SSH 'true' && grep -q 'W-a' keys.txt && grep -q 'GoToDesktop' keys.txt"
 check "the AI coding tools are installed but not signed in" "$SSH 'command -v claude && [ ! -e ~/.claude/.credentials.json ]'"
 
 # The Bots' account itself.
@@ -129,12 +152,13 @@ key meta_l-d; sleep 5; shot 4-linux-desktop
 key meta_l-g; sleep 6; shot 7-nord-theme-own-key; key meta_l-q; sleep 1
 for i in $(seq 1 40); do mon "mouse_move 60 -60"; done; sleep 5; shot 5-after-corner
 if [ "$(stat -c %s 5-after-corner.png 2>/dev/null || echo 0)" -gt 40000 ]; then note "PASS  resting the pointer in the top-right corner brings Deskmate back"; else note "NOT CHECKED  the top-right corner (the test couldn't move the pointer there)"; fi
-key meta_l-alt-spc; sleep 3; shot 6-menu; key esc
+key meta_l-alt-spc; sleep 3; shot 6-menu; key esc; sleep 1
+key meta_l-d; sleep 4; key ctrl-k; sleep 2; type_text "inb"; sleep 1; shot 8-palette; key ret; sleep 3; shot 9-inbox
 
 $SSH 'tail -c 4000 work/deskmate.log' >deskmate-log.txt 2>&1; $SSH 'tail -c 4000 work/desktop.log' >desktop-log.txt 2>&1
 $SSH 'cat /var/tmp/deskmate-debug.txt' >system-log.txt 2>&1
 $SSH 'ps -eo user:14,comm --sort=user | grep -v "^root\|^systemd\|^message" | sort | uniq -c' >processes.txt 2>&1
-kill "$(cat qemu.pid)" 2>/dev/null; sleep 2
+kill "$(cat qemu.pid)" 2>/dev/null; kill $MOCK_PID 2>/dev/null; sleep 2
 rm -rf test.raw vars.fd key key.pub *.ppm mon.sock qemu.pid clone.bin hostdata; rmdir esp 2>/dev/null
 tail -c 3000 serial.log >serial-tail.txt 2>/dev/null; rm -f serial.log
 note "$([ $FAIL = 0 ] && echo 'ALL PASSED' || echo 'SOME FAILED')"

@@ -13,7 +13,7 @@ BASE="linux-image-amd64 grub-efi-amd64 grub-efi-amd64-signed shim-signed systemd
 DESKTOP="labwc foot waybar fuzzel swaybg grim slurp wtype wlrctl wlr-randr fontconfig wl-clipboard xwayland pcmanfm-qt featherpad xdg-utils xdg-user-dirs fonts-noto-core fonts-dejavu-core fonts-noto-mono adwaita-icon-theme libgl1-mesa-dri libegl1 libgles2 libwayland-egl1 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 chromium libnotify-bin"
 DEV="build-essential python3 python3-venv python3-pip pipx nodejs npm bubblewrap binutils gdb strace ltrace jq ripgrep tmux"
 SECURITY="clamav clamav-freshclam shellcheck debsecan"
-OPTIONAL="wlsunset fonts-jetbrains-mono fonts-firacode fonts-cascadia-code fonts-inter hyperv-daemons greetd tuigreet mako-notifier cliphist swaylock swayidle btop neovim lazygit fzf fd-find bat gh bandit python3-bandit gitleaks yara lynis radare2 rizin"
+OPTIONAL="adwaita-qt adwaita-qt6 gsettings-desktop-schemas wlsunset fonts-jetbrains-mono fonts-firacode fonts-cascadia-code fonts-inter hyperv-daemons greetd tuigreet mako-notifier cliphist swaylock swayidle btop neovim lazygit fzf fd-find bat gh bandit python3-bandit gitleaks yara lynis radare2 rizin"
 
 truncate -s "$SIZE" "$IMG"
 sgdisk -Z "$IMG" >/dev/null
@@ -28,6 +28,7 @@ cleanup() {
   losetup -d "$LOOP" 2>/dev/null
 }
 trap cleanup EXIT
+udevadm settle 2>/dev/null || true; for i in $(seq 1 40); do [ -b "${LOOP}p2" ] && break; sleep 0.5; done
 mkfs.vfat -F32 -n EFI "${LOOP}p1" >/dev/null
 mkfs.ext4 -q -L deskmate-os "${LOOP}p2"
 mount "${LOOP}p2" "$ROOT"; rmdir "$ROOT/lost+found" 2>/dev/null || true

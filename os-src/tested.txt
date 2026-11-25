@@ -17,6 +17,16 @@ PASS  an admin can install system software with one command
 PASS  the Bots' account can't install system software itself
 PASS  the Bots can't read the person's settings or keys
 PASS  the customizing skill is installed for Bots and passed its own review
+a message to a Bot with no model signed in came back as: Can't reach Ollama at http://localhost:11434/v1. Is it running?  
+PASS  asked to change the theme, a Bot did it (after its approval card was answered)
+PASS  a Bot's shell command ran as the Bots' account
+PASS  a Bot wrote the file it was asked to
+PASS  the approval card for that file showed the lines it would add
+PASS  Plan first reached the model, and it answered with a plan
+PASS  a plan waiting for a go-ahead is listed as needing you
+PASS  approval cards say in plain words what will happen
+PASS  a Bot's reply while you're elsewhere lands in the Inbox
+PASS  workspaces and quick-ask keys are set
 PASS  the AI coding tools are installed but not signed in
 PASS  the Bots' account is not root
 PASS  the Bots' account has no sudo

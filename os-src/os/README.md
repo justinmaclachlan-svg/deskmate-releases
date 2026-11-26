@@ -43,7 +43,7 @@ can use it. `-NoClone` starts with a fresh Deskmate. Later copies:
 ## Getting things done faster
 
 - **Super+A** asks a Bot from anywhere; the answer comes back as a notification. **Super+Shift+A** sends what's on the clipboard along with your question.
-- **Super+I** shows the Inbox: what needs you and what finished.
+- **Super+I** shows the Inbox: approval cards to answer, questions, and what finished.
 - **Ctrl+K** in Deskmate goes to any Bot, page or action.
 - **Super+1 to 4** are four workspaces (with Shift, move the window there). Deskmate is on all of them.
 - When the Linux desktop is showing, a notification appears when a Bot finishes or needs your OK.

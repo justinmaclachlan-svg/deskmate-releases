@@ -4,7 +4,7 @@ Deskmate OS hotkeys            (Super is the Windows key)
   Super + D            The same, from the keyboard
   Super + A            Ask a Bot from anywhere (the answer comes as a notification)
   Super + Shift + A    Ask a Bot about what's on the clipboard
-  Super + I            Inbox: what needs you and what finished
+  Super + I            Inbox: approvals to answer, and what finished
   Ctrl + K             In Deskmate: go to any Bot, page or action
   Super + 1 to 4       Switch workspace (with Shift: move the window there)
   Super + Space        Launcher: find and start any app

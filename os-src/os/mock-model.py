@@ -45,6 +45,11 @@ def decide(body):
     if "whoami" in ask:
         shell = "run_shell" if "run_shell" in tools or not tools else "run_powershell"
         return "tool", (shell, {"command": "id -un > who-bot.txt; id -un"})
+    if "fetch the page" in ask:
+        return "tool", ("http_get", {"url": "https://example.com/"})
+    if "send it out" in ask:
+        shell = "run_shell" if "run_shell" in tools or not tools else "run_powershell"
+        return "tool", (shell, {"command": "curl -s -m 8 --noproxy '*' -o /dev/null http://10.0.2.2:11434/v1/models; echo \"direct: $?\"; curl -s -m 10 http://example.com/ | head -c 90; echo; curl -s -m 25 -o /dev/null -w 'ai: %{http_code}' https://api.anthropic.com/"})
     if "notes" in ask:
         return "tool", ("write_file", {"path": "notes/today.txt", "content": "Line one\nLine two\n"})
     return "text", "Hello from the test model."

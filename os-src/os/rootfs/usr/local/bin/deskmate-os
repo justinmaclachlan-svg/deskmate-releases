@@ -18,7 +18,12 @@ deskmate-os: manage this computer.
   deskmate-os share <folder>         Let your Bots read and change a folder of yours
   deskmate-os unshare <folder>
   deskmate-os stop-bots              Stop everything your Bots are running (Super+Esc)
-  sudo deskmate-os net off|on        Cut or restore the network for every Bot account
+  deskmate-os net                    What Bots may reach on the internet
+  sudo deskmate-os net locked|open|off
+                                     locked: only the allowed sites (AI services);
+                                     open: anything; off: nothing
+  sudo deskmate-os net allow <site or list> [30m]    e.g. docs.rs, or: packages 30m
+  sudo deskmate-os net deny <site or list>
   deskmate-os login <tool>           Sign in to an AI coding tool as your Bots' account:
                                      claude, codex, gemini, grok. Sign-ins are never
                                      copied from another computer.
@@ -94,6 +99,7 @@ user_add() {
   fi
   [ "$admin" = --admin ] && usermod -aG sudo "$u"
   make_agent "$u"
+  [ -x /usr/local/sbin/deskmate-net ] && /usr/local/sbin/deskmate-net apply >/dev/null 2>&1
   say "Added $u$([ "$admin" = --admin ] && echo ' (admin: can use sudo)'). Their Bots run as $u-bots."
 }
 
@@ -145,19 +151,14 @@ share() { # $1 = folder, $2 = on|off
   fi
 }
 
-net() {
-  need_root net
-  nft list table inet deskmate_bots >/dev/null 2>&1 && nft delete table inet deskmate_bots
-  if [ "${1:-}" = off ]; then
-    nft add table inet deskmate_bots
-    nft add chain inet deskmate_bots out '{ type filter hook output priority 0; }'
-    for a in $(awk -F: '$1 ~ /-bots$/ {print $3}' /etc/passwd); do
-      nft add rule inet deskmate_bots out meta skuid "$a" oifname != "lo" reject
-    done
-    say "The network is off for every Bots' account (until 'net on' or a restart)."
-  else
-    say "The network is on for Bots' accounts."
-  fi
+PROXY_ENV="HTTPS_PROXY=http://127.0.0.1:8888 HTTP_PROXY=http://127.0.0.1:8888 https_proxy=http://127.0.0.1:8888 http_proxy=http://127.0.0.1:8888 NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 NODE_USE_ENV_PROXY=1"
+net_mode() { m=$(cat /etc/deskmate-os/net/mode 2>/dev/null); case "$m" in open|off) echo "$m" ;; *) echo locked ;; esac; }
+needs_packages() { # installing needs the software sites, which the lock leaves out
+  case "$(net_mode)" in
+    off) die "The internet is off for Bots, so nothing can be installed in their account. Turn it back on first: sudo deskmate-os net locked" ;;
+    locked) grep -qx packages /etc/deskmate-os/net/enabled-sets 2>/dev/null || die "Bots' internet is locked to AI services, and installing needs the software sites for a few minutes. Run this, then try again:
+  sudo deskmate-os net allow packages 30m" ;;
+  esac
 }
 
 install_tool() {
@@ -167,14 +168,13 @@ install_tool() {
     claude) pkg=@anthropic-ai/claude-code ;;
     codex) pkg=@openai/codex ;;
     gemini) pkg=@google/gemini-cli ;;
-    grok)
-      say "Installing Grok Build with xAI's installer in $a's account (not as root, not as you)."
-      sudo -n -H -u "$a" -- env "PATH=/home/$a/.local/bin:/usr/local/bin:/usr/bin:/bin" bash -c 'curl -fsSL https://x.ai/cli/install.sh | bash'
-      return ;;
+    grok) pkg=@xai-official/grok ;;
     *) die "Install which tool? claude, codex, gemini or grok." ;;
   esac
+  needs_packages
   say "Installing $pkg in $a's account (not as root, not as you)."
-  sudo -n -H -u "$a" -- env "NPM_CONFIG_PREFIX=/home/$a/.npm-global" "PATH=/home/$a/.npm-global/bin:/usr/local/bin:/usr/bin:/bin" npm install -g "$pkg" \
+  # shellcheck disable=SC2086
+  sudo -n -H -u "$a" -- env $PROXY_ENV "NPM_CONFIG_PREFIX=/home/$a/.npm-global" "PATH=/home/$a/.npm-global/bin:/usr/local/bin:/usr/bin:/bin" npm install -g "$pkg" \
     && say "Done. Deskmate reviews new tools on its next security check; sign in from a Bot's chat or Settings → Models."
 }
 
@@ -191,7 +191,8 @@ login_tool() {
   local p="/home/$a/.local/bin:/home/$a/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
   sudo -n -H -u "$a" -- env "PATH=$p" sh -c "command -v ${cmd%% *} >/dev/null" || die "${cmd%% *} isn't installed. Run: deskmate-os install $1"
   say "Signing in to $1 as $a. Follow its prompts; open any link it shows in the browser here. Leave the tool (Ctrl+C twice or /exit) when it says you're signed in."
-  ( cd /tmp && sudo -H -u "$a" -- env "PATH=$p" "TERM=${TERM:-xterm}" "BROWSER=echo" $cmd )
+  # shellcheck disable=SC2086
+  ( cd /tmp && sudo -H -u "$a" -- env $PROXY_ENV "PATH=$p" "TERM=${TERM:-xterm}" "BROWSER=echo" $cmd )
 }
 
 status() {
@@ -200,7 +201,11 @@ status() {
   for u in $(people); do
     say "  $u ($(id -nG "$u" | grep -qw sudo && echo admin || echo standard)); Bots run as $u-bots, $(pgrep -u "$u-bots" 2>/dev/null | wc -l) process(es) now"
   done
-  nft list table inet deskmate_bots >/dev/null 2>&1 && say "Bot network: OFF" || say "Bot network: on"
+  case "$(net_mode)" in
+    locked) say "Bots' internet: locked to the allowed sites (deskmate-os net shows them)" ;;
+    open) say "Bots' internet: OPEN to any site" ;;
+    off) say "Bots' internet: off" ;;
+  esac
   say "Root login: terminal only (su - or sudo -i)"
   local n; n=$(apt list --upgradable 2>/dev/null | grep -c / || true)
   say "Updates waiting: $n"
@@ -220,7 +225,12 @@ case "${1:-help}" in
     sudo -n -u "$a" -- /usr/bin/pkill -KILL -u "$a" 2>/dev/null
     command -v notify-send >/dev/null && notify-send "Deskmate" "Stopped everything in $a."
     say "Stopped everything running as $a." ;;
-  net) net "${2:-}" ;;
+  net)
+    case "${2:-status}" in
+      status|list) exec /usr/local/sbin/deskmate-net status ;;
+      on) need_root "net locked"; exec /usr/local/sbin/deskmate-net locked ;;
+      *) need_root "net ${2:-}"; shift; exec /usr/local/sbin/deskmate-net "$@" ;;
+    esac ;;
   install) install_tool "${2:-}" ;;
   login) login_tool "${2:-}" ;;
   update) need_root update; apt-get update && apt-get -y full-upgrade && apt-get -y autoremove; command -v freshclam >/dev/null && freshclam --quiet 2>/dev/null; say "Up to date." ;;

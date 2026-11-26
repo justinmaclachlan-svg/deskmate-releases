@@ -1,0 +1,199 @@
+#!/usr/bin/python3 -I
+"""The only way out to the internet for Bots' accounts on Deskmate OS.
+
+Bots' accounts can't open connections off this computer (a firewall rule),
+so everything they send goes through here, and this lets a request through
+only when the site is on the allowed list. It never reads what's inside a
+secure connection; it only decides where connections may go.
+
+Mode and list come from /etc/deskmate-os/net (written by deskmate-net) and
+are read again whenever they change. Refused sites are noted in a small log
+so the Security page can show them.
+"""
+import asyncio, json, os, re, sys, time
+
+D = os.environ.get("DESKMATE_NET_DIR", "/etc/deskmate-os/net")
+LOG = os.environ.get("DESKMATE_NET_LOG", "/var/log/deskmate-net/blocked.log")
+PORT = int(os.environ.get("DESKMATE_NET_PORT", "8888"))
+HOST_OK = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
+state = {"stamp": None, "mode": "locked", "exact": set(), "under": ()}
+recent = {}  # host -> last time it was logged, so a retry loop can't fill the log
+
+
+def load():
+    stamp = []
+    for f in ("mode", "allowed"):
+        try:
+            s = os.stat(os.path.join(D, f))
+            stamp.append((s.st_mtime_ns, s.st_size))
+        except OSError:
+            stamp.append(None)
+    if stamp == state["stamp"]:
+        return
+    mode, exact, under = "locked", set(), []
+    try:
+        m = open(os.path.join(D, "mode")).read().strip()
+        if m in ("open", "off"):
+            mode = m
+    except OSError:
+        pass
+    try:
+        for line in open(os.path.join(D, "allowed")):
+            d = line.strip().lower()
+            if d.startswith("."):
+                if HOST_OK.match(d[1:]):
+                    exact.add(d[1:])
+                    under.append(d)
+            elif HOST_OK.match(d):
+                exact.add(d)
+    except OSError:
+        pass
+    state.update(stamp=stamp, mode=mode, exact=exact, under=tuple(under))
+
+
+def allowed(host, port, tunnel):
+    load()
+    if state["mode"] == "off":
+        return False
+    if state["mode"] == "open":
+        return True
+    if port != (443 if tunnel else 80):
+        return False
+    return host in state["exact"] or (bool(state["under"]) and host.endswith(state["under"]))
+
+
+def note(host, port):
+    now = time.time()
+    if now - recent.get(host, 0) < 60:
+        return
+    if len(recent) > 2000:
+        recent.clear()
+    recent[host] = now
+    try:
+        if os.path.getsize(LOG) > 200_000:
+            lines = open(LOG).read().splitlines()[-300:]
+            with open(LOG, "w") as f:
+                f.write("\n".join(lines) + "\n")
+    except OSError:
+        pass
+    try:
+        with open(LOG, "a") as f:
+            f.write(json.dumps({"at": int(now), "host": host[:253], "port": port}) + "\n")
+    except OSError:
+        pass
+
+
+def split_host(target, default_port):
+    target = target.strip().lower()
+    if target.startswith("["):  # [v6]:port
+        end = target.find("]")
+        if end < 0:
+            return None, 0
+        host, rest = target[1:end], target[end + 1:]
+        port = rest[1:] if rest.startswith(":") else ""
+    elif target.count(":") == 1:
+        host, port = target.split(":")
+    else:
+        host, port = target, ""
+    try:
+        port = int(port) if port else default_port
+    except ValueError:
+        return None, 0
+    host = host.rstrip(".")
+    if not host or not (0 < port < 65536) or not re.match(r"^[a-z0-9:.-]{1,253}$", host):
+        return None, 0
+    return host, port
+
+
+async def pipe(r, w):
+    try:
+        while True:
+            data = await r.read(65536)
+            if not data:
+                break
+            w.write(data)
+            await w.drain()
+    except (OSError, asyncio.CancelledError):
+        pass
+    finally:
+        try:
+            w.close()
+        except OSError:
+            pass
+
+
+async def refuse(w, code, text):
+    body = (text + "\n").encode()
+    w.write(b"HTTP/1.1 %d %s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % (code, b"Forbidden" if code == 403 else b"Bad Request" if code == 400 else b"Bad Gateway", len(body)) + body)
+    try:
+        await w.drain()
+    except OSError:
+        pass
+    w.close()
+
+
+async def handle(r, w):
+    try:
+        head = await asyncio.wait_for(r.readuntil(b"\r\n\r\n"), 20)
+    except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, asyncio.TimeoutError, OSError):
+        w.close()
+        return
+    try:
+        first, _, rest = head.partition(b"\r\n")
+        method, target, version = first.decode("latin-1").split(" ", 2)
+    except ValueError:
+        return await refuse(w, 400, "Deskmate OS: that request didn't make sense.")
+    tunnel = method.upper() == "CONNECT"
+    if tunnel:
+        host, port = split_host(target, 443)
+        path = ""
+    else:
+        m = re.match(r"^http://([^/?#]+)(.*)$", target, re.I)
+        if not m:
+            return await refuse(w, 400, "Deskmate OS: this is a proxy for web addresses only.")
+        host, port = split_host(m.group(1).rsplit("@", 1)[-1], 80)
+        path = m.group(2) or "/"
+        if not path.startswith("/"):
+            path = "/" + path
+    if not host:
+        return await refuse(w, 400, "Deskmate OS: that address didn't make sense.")
+    if not allowed(host, port, tunnel):
+        note(host, port)
+        if state["mode"] == "off":
+            why = "The internet is turned off for Bots on this computer."
+        else:
+            why = ("Bots on this computer can only reach the allowed sites, and %s%s isn't one of them. "
+                   "An admin can allow it with: sudo deskmate-os net allow %s" % (host, "" if port in (80, 443) else ":%d" % port, host))
+        return await refuse(w, 403, "Deskmate OS: " + why)
+    try:
+        ur, uw = await asyncio.wait_for(asyncio.open_connection(host, port), 30)
+    except (OSError, asyncio.TimeoutError):
+        return await refuse(w, 502, "Deskmate OS: couldn't reach %s." % host)
+    try:
+        if tunnel:
+            w.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            await w.drain()
+        else:
+            # One request per connection, so every request gets checked.
+            lines = [l for l in rest.split(b"\r\n") if l and not l.lower().startswith((b"proxy-", b"connection:", b"keep-alive:"))]
+            uw.write(("%s %s %s\r\n" % (method, path, version)).encode("latin-1") + b"\r\n".join(lines) + b"\r\nConnection: close\r\n\r\n")
+            await uw.drain()
+    except OSError:
+        uw.close()
+        w.close()
+        return
+    await asyncio.gather(pipe(r, uw), pipe(ur, w))
+
+
+async def main():
+    load()
+    server = await asyncio.start_server(handle, "127.0.0.1", PORT, limit=65536, backlog=256)
+    async with server:
+        await server.serve_forever()
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)

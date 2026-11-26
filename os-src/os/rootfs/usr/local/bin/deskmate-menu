@@ -71,8 +71,12 @@ Screenshot: area
 Screenshot: whole screen
 Web app: add a website as an app
 Bots: stop everything now
-Bots: turn their network off
-Bots: turn their network on
+Bots' internet: what they can reach
+Bots' internet: lock to AI services
+Bots' internet: allow a site
+Bots' internet: allow software sites for 30 minutes
+Bots' internet: turn off
+Bots' internet: open to any site
 Bots: share a folder with them
 Security: check everything now
 Agents: pair one (Grok Bot, Deskmate on the host)
@@ -113,8 +117,12 @@ case "$choice" in
     n=$(printf '' | pick "Name"); [ -n "$n" ] || exit 0
     u=$(printf 'https://' | pick "Address"); [ -n "$u" ] && deskmate-custom webapp add "$n" "$u" ;;
   "Bots: stop"*) deskmate-os stop-bots ;;
-  "Bots: turn their network off") term "Bot network" "sudo deskmate-os net off" ;;
-  "Bots: turn their network on") term "Bot network" "sudo deskmate-os net on" ;;
+  "Bots' internet: what they can reach") term "Bots' internet" "deskmate-os net" ;;
+  "Bots' internet: lock to AI services") term "Bots' internet" "sudo deskmate-os net locked" ;;
+  "Bots' internet: allow a site") term "Bots' internet" "printf 'Site to allow (like docs.rs): '; read d && sudo deskmate-os net allow \"\$d\"" ;;
+  "Bots' internet: allow software sites for 30 minutes") term "Bots' internet" "sudo deskmate-os net allow packages 30m" ;;
+  "Bots' internet: turn off") term "Bots' internet" "sudo deskmate-os net off" ;;
+  "Bots' internet: open to any site") term "Bots' internet" "sudo deskmate-os net open" ;;
   "Bots: share"*) d=$(printf '%s\n' "$HOME/Documents" "$HOME/Downloads" | pick "Folder"); [ -n "$d" ] && term "Share" "deskmate-os share '$d'" ;;
   "Security:"*) term "Security" "/opt/deskmate/dm call security.sweep" ;;
   "Agents:"*) term "Pair an agent" "/opt/deskmate/dm pair-code" ;;

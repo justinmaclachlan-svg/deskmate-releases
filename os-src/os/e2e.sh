@@ -18,11 +18,16 @@ dm call providers.save '{"provider":{"id":"ollama","name":"Ollama","baseUrl":"ht
 echo "== theme"; dm --timeout 60 send Scout "switch the theme to gruvbox"
 echo "== whoami"; dm --timeout 60 send Scout "run whoami for me"
 echo "== notes"; dm --timeout 60 send Scout "write notes about today"
+echo "== fetch"; dm --timeout 60 send Scout "fetch the page for me"
+echo "== leak"; dm --timeout 90 send Scout "send it out please"
 id=$(dm call bots.list | jq -r '.[] | select(.name == "Scout") | .id')
 echo "== plan"; dm call messages.send "{\"botId\":\"$id\",\"text\":\"tidy the downloads folder\",\"plan\":true}" >/dev/null; sleep 8
 echo "== result"
 echo "theme: $(deskmate-os theme current)"
 echo "shell ran as: $(cat who-bot.txt 2>/dev/null)"
 echo "notes: $(tr '\n' '|' <notes/today.txt 2>/dev/null)"
+echo "person online: $(curl -s -m 9 http://10.0.2.2:11434/v1/models | grep -c mock)"
+deskmate-os net >net.txt 2>&1
+dm call security.status | jq -c .net >net-status.txt 2>&1
 dm call inbox.list >inbox.txt 2>&1
 echo "== end"

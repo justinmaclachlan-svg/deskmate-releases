@@ -27,6 +27,18 @@ PASS  a plan waiting for a go-ahead is listed as needing you
 PASS  approval cards say in plain words what will happen
 PASS  a Bot's reply while you're elsewhere lands in the Inbox
 PASS  workspaces and quick-ask keys are set
+PASS  Bots' internet starts locked to the AI services
+PASS  the Bots' account can't connect straight out, around the gate
+PASS  the Bots' account can't look names up (no data out through lookups)
+PASS  programs in the Bots' account are pointed at the gate
+PASS  the gate refuses a site that isn't allowed
+PASS  the gate lets an allowed AI service through
+PASS  a look-alike address is refused
+PASS  a Bot asked to fetch a site that isn't allowed is told no
+PASS  a Bot's shell can't send anything straight out
+PASS  a Bot's shell reaches an AI service through the gate, and nothing else
+PASS  refused sites are listed for the Security page
+PASS  the person is still online (only Bots are limited)
 PASS  the AI coding tools are installed but not signed in
 PASS  the Bots' account is not root
 PASS  the Bots' account has no sudo

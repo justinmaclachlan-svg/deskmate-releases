@@ -1,0 +1,16 @@
+[Unit]
+Description=Deskmate OS: what Bots' accounts may reach on the internet
+After=nftables.service systemd-resolved.service deskmate-firstboot.service
+Wants=systemd-resolved.service deskmate-proxy.service
+# The main firewall starts from a clean slate, so the lock goes back on after it.
+PartOf=nftables.service
+ReloadPropagatedFrom=nftables.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/deskmate-net apply
+ExecReload=/usr/local/sbin/deskmate-net apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

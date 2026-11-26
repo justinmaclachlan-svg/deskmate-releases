@@ -107,8 +107,28 @@ same folder they see as their workspace); share another folder with
 - **Daily sweep.** Rescans skills and plugins, checks projects' dependencies
   against known vulnerabilities (OSV.dev) and the system's packages against
   Debian's list. Security updates install themselves daily.
+- **Bots' internet is locked.** Bots' accounts can't open connections off the
+  computer: a firewall rule refuses them, name lookups included. The one way
+  out is a gate on the computer (`deskmate-proxy`) that lets a connection
+  through only to an allowed site, and the list starts as the AI services:
+  Anthropic (Claude), OpenAI (Codex, ChatGPT), Google (Gemini, Antigravity)
+  and xAI (Grok), plus the vulnerability lookup the security review uses. So
+  a Bot that reads a poisoned page or file has nowhere else to send things.
+  What Deskmate fetches for a Bot goes through the same gate. You, root and
+  system updates aren't limited. Security shows the list and what was refused.
+  - `deskmate-os net` shows the mode and the list.
+  - `sudo deskmate-os net allow docs.rs` adds a site (`.example.com` covers
+    everything under it); `net deny` removes it.
+  - `sudo deskmate-os net allow packages 30m` lets Bots reach npm, PyPI,
+    crates.io, GitHub and Debian for half an hour, to install what a project
+    needs. Those sites accept uploads, so they're off by default.
+  - `sudo deskmate-os net open` takes the lock off, `net off` cuts Bots off
+    completely, `net locked` puts it back.
+  The allowed AI services can still be misused (a poisoned prompt could tell
+  a Bot to send text to someone else's account there), so approvals and the
+  sandbox still matter. For a lock that even root in the VM can't undo, add a
+  rule on the Windows host as well.
 - **Stops.** Super+Esc ends everything your Bots are running.
-  `sudo deskmate-os net off` cuts the network for every Bots' account.
 - **Firewall.** Nothing in except SSH (keys only, never root) and the phone link.
 
 A scan lowers risk; it can't prove something is safe. The accounts, the

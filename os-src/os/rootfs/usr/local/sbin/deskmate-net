@@ -1,0 +1,137 @@
+#!/bin/bash
+# What Bots' accounts may reach on the internet.
+#
+#   locked  only the allowed sites (AI services by default), through a gate
+#           on this computer (deskmate-proxy). Nothing else gets out: no
+#           other sites, no direct connections, no name lookups.
+#   open    anything
+#   off     nothing at all
+#
+# You, root and system updates are never affected: only Bots' accounts are.
+set -u
+D=/etc/deskmate-os/net
+PORT=8888
+say() { printf '%s\n' "$*"; }
+die() { printf '%s\n' "$*" >&2; exit 1; }
+root_only() { [ "$(id -u)" = 0 ] || die "This needs root. Run: sudo deskmate-os net $*"; }
+mode() { m=$(cat "$D/mode" 2>/dev/null); case "$m" in open|off) echo "$m" ;; *) echo locked ;; esac; }
+ok_domain() { [[ "$1" =~ ^\.?[a-z0-9]([a-z0-9.-]{0,250}[a-z0-9])?$ ]] && [[ "$1" == *.* ]]; }
+is_set() { [[ "$1" =~ ^[a-z]+$ ]] && [ -f "$D/sets/$1.list" ]; }
+set_names() { for f in "$D"/sets/*.list; do basename "$f" .list; done | tr '\n' ' '; }
+sets_on() { grep -E '^[a-z]+$' "$D/enabled-sets" 2>/dev/null || true; }
+allowed() { # every allowed entry, one per line
+  { for s in $(sets_on); do cat "$D/sets/$s.list" 2>/dev/null; done; cat "$D/custom.list" 2>/dev/null; } |
+    sed 's/#.*//; s/[[:space:]]//g' | tr '[:upper:]' '[:lower:]' | grep -v '^$' | sort -u |
+    while read -r d; do ok_domain "$d" && echo "$d"; done
+}
+bot_uids() { awk -F: '$1 ~ /-bots$/ && $3 >= 1000 {print $3}' /etc/passwd | paste -sd, -; }
+drop_line() { # drop_line <file> <exact line>
+  [ -f "$1" ] || return 0
+  grep -vxF -- "$2" "$1" >"$1.tmp" || true
+  mv "$1.tmp" "$1"
+}
+remove() { if is_set "$1"; then drop_line "$D/enabled-sets" "$1"; else drop_line "$D/custom.list" "$1"; fi; }
+forget_expiry() { [ -f "$D/expires" ] || return 0; awk -v n="$1" '$1 != n' "$D/expires" >"$D/expires.tmp"; mv "$D/expires.tmp" "$D/expires"; }
+expire() { # things allowed "for 30m" turn themselves off, across restarts too
+  [ -s "$D/expires" ] || return 0
+  local now name t; now=$(date +%s)
+  while read -r name t; do
+    [[ "$t" =~ ^[0-9]+$ ]] || continue
+    if [ "$t" -le "$now" ]; then remove "$name"; else echo "$name $t"; fi
+  done <"$D/expires" >"$D/expires.new"
+  mv "$D/expires.new" "$D/expires"
+}
+
+apply() {
+  root_only apply
+  expire
+  local m; m=$(mode)
+  # The list the gate reads. It notices the change by itself.
+  allowed >"$D/allowed.tmp" && mv "$D/allowed.tmp" "$D/allowed"
+  chmod 644 "$D/allowed" "$D/mode" "$D/enabled-sets" "$D/custom.list" 2>/dev/null
+  if [ -d /run/systemd/system ]; then
+    systemctl is-active --quiet deskmate-proxy || systemctl --no-block start deskmate-proxy 2>/dev/null
+  fi
+
+  # Bots' accounts may only talk to this computer itself (where the gate is).
+  nft list table inet deskmate_bots >/dev/null 2>&1 && nft delete table inet deskmate_bots
+  local uids; uids=$(bot_uids)
+  if [ -n "$uids" ] && [ "$m" != open ]; then
+    nft -f - <<NFT || say "Warning: the firewall rule for Bots' accounts didn't load, so they are NOT limited right now."
+table inet deskmate_bots {
+  chain out {
+    type filter hook output priority 0; policy accept;
+    meta skuid { $uids } udp dport { 53, 5353, 5355 } reject
+    meta skuid { $uids } tcp dport { 53, 853, 5355 } reject
+    $([ "$m" = off ] && echo "meta skuid { $uids } tcp dport $PORT reject")
+    meta skuid { $uids } oifname "lo" accept
+    meta skuid { $uids } reject
+  }
+}
+NFT
+  fi
+  # No name lookups through the system's resolver either: a lookup can carry data out.
+  for sock in /run/systemd/resolve/io.systemd.Resolve /run/systemd/resolve/io.systemd.Resolve.Monitor; do
+    [ -S "$sock" ] || continue
+    if [ "$m" = open ]; then setfacl -x g:deskmate-bots "$sock" 2>/dev/null; else setfacl -m g:deskmate-bots:--- "$sock" 2>/dev/null; fi
+  done
+  return 0
+}
+
+status() {
+  local m; m=$(mode)
+  case "$m" in
+    locked) say "Bots' internet: LOCKED to the allowed sites below. Everything else is refused." ;;
+    open) say "Bots' internet: OPEN. Bots can reach any site." ;;
+    off) say "Bots' internet: OFF. Bots can't reach any site." ;;
+  esac
+  say "Lists on: $(sets_on | tr '\n' ' ') (all lists: $(set_names))"
+  if [ -s "$D/expires" ]; then
+    while read -r name t; do [[ "$t" =~ ^[0-9]+$ ]] && say "  $name turns itself off at $(date -d "@$t" '+%H:%M')"; done <"$D/expires"
+  fi
+  if [ "$m" = locked ]; then
+    say "Allowed:"
+    allowed | sed 's/^\.\(.*\)$/\1 (and everything under it)/; s/^/  /'
+  fi
+  if [ "$m" != off ] && [ -d /run/systemd/system ] && ! systemctl is-active --quiet deskmate-proxy; then
+    say "Warning: the gate (deskmate-proxy) isn't running, so Bots have no internet at all until it is. See: journalctl -u deskmate-proxy"
+  fi
+  say "You, root and system updates are not limited."
+  say "Change it: sudo deskmate-os net locked | open | off | allow <site or list> [30m] | deny <site or list>"
+}
+
+case "${1:-status}" in
+  status|list) status ;;
+  apply) apply ;;
+  locked|open|off)
+    root_only "$1"
+    echo "$1" >"$D/mode"; apply; status | head -1 ;;
+  allow)
+    root_only "allow ${2:-}"
+    x=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]'); for=${3:-}
+    if [ -n "$for" ] && ! [[ "$for" =~ ^[0-9]{1,3}[mh]$ ]]; then die "For how long? Like 30m or 2h."; fi
+    if is_set "$x"; then
+      grep -qx "$x" "$D/enabled-sets" 2>/dev/null || echo "$x" >>"$D/enabled-sets"
+      say "The '$x' list is on${for:+ for $for}."
+    elif ok_domain "$x"; then
+      grep -qxF -- "$x" "$D/custom.list" 2>/dev/null || echo "$x" >>"$D/custom.list"
+      say "Bots can now reach $x${for:+ for $for}."
+    else
+      die "Give a site like example.com (or .example.com for everything under it), or a list: $(set_names)"
+    fi
+    forget_expiry "$x"
+    if [ -n "$for" ]; then
+      n=${for%[mh]}; case "$for" in *h) secs=$((n * 3600)) ;; *) secs=$((n * 60)) ;; esac
+      echo "$x $(($(date +%s) + secs))" >>"$D/expires"
+      systemd-run --quiet --on-active="$((secs + 2))" /usr/local/sbin/deskmate-net apply >/dev/null 2>&1 || say "(It turns off at the next restart or change at the latest.)"
+    fi
+    apply ;;
+  deny)
+    root_only "deny ${2:-}"
+    x=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')
+    [ -n "$x" ] || die "Remove which site or list?"
+    if is_set "$x"; then say "The '$x' list is off."; else say "Removed $x from your own list."; fi
+    remove "$x"; forget_expiry "$x"
+    apply ;;
+  *) die "deskmate-os net status | locked | open | off | allow <site or list> [30m] | deny <site or list>" ;;
+esac

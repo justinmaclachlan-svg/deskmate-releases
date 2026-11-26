@@ -1,0 +1,15 @@
+# Off by default. Software libraries for Bots: sudo deskmate-os net allow packages
+# These sites also accept uploads from anyone with an account, so leave this
+# off unless a Bot needs to install something, and turn it off again after.
+registry.npmjs.org
+pypi.org
+files.pythonhosted.org
+crates.io
+static.crates.io
+index.crates.io
+github.com
+api.github.com
+codeload.github.com
+.githubusercontent.com
+deb.debian.org
+security.debian.org

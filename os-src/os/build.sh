@@ -110,6 +110,12 @@ passwd_lock() { in_root passwd -l root >/dev/null; }; passwd_lock
 rm -f "$ROOT"/etc/ssh/ssh_host_*
 in_root systemctl enable systemd-networkd systemd-resolved systemd-timesyncd ssh nftables deskmate-firstboot unattended-upgrades >/dev/null 2>&1
 in_root systemctl enable clamav-freshclam >/dev/null 2>&1 || true
+# Bots' internet goes through a gate that only lets the allowed sites through.
+in_root groupadd --system deskmate-bots 2>/dev/null || true
+in_root useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin deskmate-proxy
+chmod 644 "$ROOT"/etc/deskmate-os/net/mode "$ROOT"/etc/deskmate-os/net/enabled-sets "$ROOT"/etc/deskmate-os/net/custom.list "$ROOT"/etc/deskmate-os/net/sets/*.list
+in_root systemctl enable deskmate-proxy deskmate-net >/dev/null 2>&1
+echo "Bots' internet: gate $(in_root systemctl is-enabled deskmate-proxy 2>&1 || true), lock $(in_root systemctl is-enabled deskmate-net 2>&1 || true)"
 if [ -x "$ROOT/usr/bin/tuigreet" ] && [ -x "$ROOT/usr/sbin/greetd" ]; then
   in_root systemctl enable greetd >/dev/null 2>&1
   in_root systemctl disable getty@tty1 >/dev/null 2>&1 || true

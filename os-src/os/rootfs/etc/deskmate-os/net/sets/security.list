@@ -1,0 +1,3 @@
+# Known-vulnerability lists the security review reads (OSV.dev and Debian).
+api.osv.dev
+security-tracker.debian.org

@@ -80,7 +80,7 @@ $SSH 'ps -eo user:14,comm | grep -v "^root"' >before-login.txt 2>&1
 # Log in at the screen as the person.
 type_text tester; key ret; sleep 2; type_text testpass1; key ret
 sleep 45; shot 2-deskmate
-check "nothing started a desktop before anyone logged in" "! grep -q 'labwc\|deskmate' before-login.txt"
+check "nothing started a desktop before anyone logged in" "! grep -v deskmate-proxy before-login.txt | grep -q 'labwc\|deskmate'"
 check "Deskmate is running as the person" "$SSH pgrep -u tester -fx /opt/deskmate/deskmate"
 check "the desktop is running (labwc, waybar)" "$SSH 'pgrep -u tester -x labwc && pgrep -u tester -x waybar'"
 
@@ -100,7 +100,7 @@ type_text "dpkg -s cowsay >> Bots/pkg.txt 2>&1"; key ret; sleep 2
 type_text "dm send Scout hello > Bots/send.txt 2>&1"; key ret; sleep 40
 $SSH 'cat > work/e2e.sh' <"$HERE/e2e.sh"
 type_text "sh Bots/e2e.sh"; key ret
-for i in $(seq 1 40); do $SSH 'grep -q "== end" work/e2e.txt' 2>/dev/null && break; sleep 5; done
+for i in $(seq 1 70); do $SSH 'grep -q "== end" work/e2e.txt' 2>/dev/null && break; sleep 5; done
 type_text "deskmate-os keys list > Bots/keys.txt 2>&1"; key ret; sleep 2
 type_text "cp .local/state/deskmate.log .local/state/desktop.log Bots/"; key ret; sleep 2
 shot 3-terminal
@@ -136,6 +136,20 @@ check "a plan waiting for a go-ahead is listed as needing you" "python3 -c \"imp
 check "approval cards say in plain words what will happen" "grep -q '\"summary\":\"theme set gruvbox\"' approval-cards.jsonl"
 check "a Bot's reply while you're elsewhere lands in the Inbox" "python3 -c \"import json,sys; d=json.load(open('inbox.json')); sys.exit(0 if any(i['bot']['name']=='Scout' for i in d['items']) else 1)\""
 check "workspaces and quick-ask keys are set" "$SSH 'true' && grep -q 'W-a' keys.txt && grep -q 'GoToDesktop' keys.txt"
+# Bots' internet: locked to the allowed sites.
+$SSH cat work/net.txt >net.txt 2>/dev/null; $SSH cat work/net-status.txt >net-status.json 2>/dev/null
+check "Bots' internet starts locked to the AI services" "grep -q LOCKED net.txt && grep -q api.anthropic.com net.txt && grep -q api.x.ai net.txt && ! grep -q registry.npmjs.org net.txt"
+check "the Bots' account can't connect straight out, around the gate" "! $SSH 'curl -s -m 8 --noproxy \"*\" -o /dev/null http://10.0.2.2:11434/v1/models'"
+check "the Bots' account can't look names up (no data out through lookups)" "! $SSH 'getent hosts example.com'"
+check "programs in the Bots' account are pointed at the gate" "[ \"\$($SSH 'echo \$HTTPS_PROXY')\" = http://127.0.0.1:8888 ]"
+check "the gate refuses a site that isn't allowed" "$SSH 'curl -s -m 10 http://example.org/' | grep -q 'only reach the allowed sites'"
+check "the gate lets an allowed AI service through" "$SSH 'curl -s -m 25 -o /dev/null -w %{http_code} https://api.anthropic.com/' | grep -q '^[1-5][0-9][0-9]\$'"
+check "a look-alike address is refused" "[ \"\$($SSH 'curl -s -m 10 -o /dev/null -w %{http_connect} https://api.anthropic.com.example.org/')\" = 403 ]"
+check "a Bot asked to fetch a site that isn't allowed is told no" "sed -n '/^== fetch/,/^== leak/p' bot-work.txt | grep -q \"isn't one of them\""
+check "a Bot's shell can't send anything straight out" "grep -q 'direct: [1-9]' bot-work.txt"
+check "a Bot's shell reaches an AI service through the gate, and nothing else" "grep -q 'ai: [1-5][0-9][0-9]' bot-work.txt && sed -n '/^== leak/,/^== result/p' bot-work.txt | grep -q 'only reach the allowed sites'"
+check "refused sites are listed for the Security page" "grep -q '\"mode\":\"locked\"' net-status.json && grep -q '\"host\":\"example.com\"' net-status.json"
+check "the person is still online (only Bots are limited)" "grep -q '^person online: [1-9]' bot-work.txt"
 check "the AI coding tools are installed but not signed in" "$SSH 'command -v claude && [ ! -e ~/.claude/.credentials.json ]'"
 
 # The Bots' account itself.
